@@ -10,7 +10,6 @@ import sys
 import re
 import os
 import shutil
-#import commands
 import subprocess
 from zipfile import ZipFile
 #import zipfile
@@ -21,31 +20,18 @@ from zipfile import ZipFile
 # +++your code here+++
 # Write functions and modify main() to call them
 def list_dir(dir):
-  #cmd = 'dir'
-  # (status, output) = subprocess.getstatusoutput(cmd)
-  status = 0
-  #if not os.path.exists(dir):
-    #sys.stderr.write('dir doesnt exists ', dir)
-    #status = 1
-    #sys.exit(1)
-  #if status == 0:
   filenames = os.listdir(dir)
   filename_list = []
   for filename in filenames:
     match = re.search(r'[\w.]+__[\w.]+__', filename)
     if match:
       abspath = os.path.abspath(os.path.join(dir, filename))
-      #abspath = os.path.abspath(dir) + '\\' + filename
-      print (abspath)
       filename_list.append(abspath)
-      #if os.path.exists(dir):
-        #shutil.copy(filename, dir)
     else:
       print ('filename doesn\'t match', filename)
   return filename_list
   
 def copy_to_dir(filename_list,todir):
-  #status = 0
   if not os.path.exists(todir):
     os.mkdir(todir)
   for filename in filename_list:
@@ -99,8 +85,6 @@ def main():
     zip_to(filename_list, tozip)
   else:
     print ('\n'.join(filename_list))
-  #if not status:
-    #sys.exit(1)
   
 if __name__ == "__main__":
   main()
