@@ -14,7 +14,7 @@ def print_results(data):
     
     for i in jsonObj["features"]:
         print(i["properties"]["place"])
-     print("------------------\n")
+    print("------------------\n")
     
     for i in jsonObj["features"]:
         if i["properties"]["mag"] >= 4.0:
