@@ -4,6 +4,7 @@ import pandas as pd
 import xlwings as xw
 import dateutil.parser
 import numpy as np
+import pprint
 
 nse = NSE()
 
@@ -32,7 +33,7 @@ eq.range('1:1').color = (211, 211, 211)
 fd.range('1:1').font.bold = True
 fd.range('1:1').color = (211, 211, 211)
 
-## Initializing OptionChain sheet
+####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
 df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
 df = df.set_index("FNO Symbol", drop=True)
@@ -41,21 +42,28 @@ oc.range("D2").value, oc.range("D3").value = "Enter Symbol", "Enter Expiry"
 pre_oc_sym = pre_oc_exp = ""
 exp_list = []
 
-## Initializing EquityData sheet
-eq.range("A:A").value = None
+######################### Initializing EquityData sheet #######################
+eq.range("A:A").value = eq.range("D5:E30").value = eq.range("K1:AF4000").value = None
 eq_df = pd.DataFrame({"Index Symbol":nse.equity_market_categories})
 eq_df = eq_df.set_index("Index Symbol", drop=True)
 eq.range("A1").value = eq_df
-eq.range("D2").value, oc.range("D3").value = "Enter Index ", "Enter Equity"
+eq.range("D2").value, eq.range("D3").value = "Enter Index ", "Enter Equity"
 pre_ind_sym = pre_eq_sym = ""
-#eq_list = []
 
-print("Excel is starting up....")
+####################### Initializing FuturesData sheet #######################
+fd.range("A:A").value = fd.range("G1:Z100").value = None
+fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
+fd_df = fd_df.set_index("FNO Symbol", drop=True)
+fd.range("A1").value = fd_df
+fd.range("D2").value = "Enter Index/Equity"
+pre_fd_sym = ""
+
+print("Excel is starting....")
 
 while True:
     time.sleep(1)
 
-    ## OptionChain
+    ############################# OptionChain Starts #############################
     oc_sym, oc_exp = oc.range("E2").value, oc.range("E3").value    
     if pre_oc_sym != oc_sym or pre_oc_exp != oc_exp:
         oc.range("G1:V4000").value = None
@@ -118,30 +126,84 @@ while True:
             oc.range("G1").value = df
         except:
             pass
-    
-    ## EquityData
+
+    ####################### OptionChain Ends ###########################
+
+    ####################### EquityData Starts ###########################
     ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
     if pre_ind_sym != ind_sym or pre_eq_sym != eq_sym:
-        eq.range("G1:AF1000").value = None
+        eq.range("K1:AF1000").value = eq.range("D6:H30").value = None
         if pre_ind_sym != ind_sym:
-            eq.range("B:B").value = eq.range("D6:E19").value = None
-            #eq_list = []
+            eq.range("D6:H30").value = eq.range("E3").value = None
         pre_ind_sym = ind_sym
         pre_eq_sym = eq_sym 
     if ind_sym is not None:
         try:
-            #if not eq_list:
             eq_df = nse.equity_market_data(ind_sym)
-            #eq_df = eq_df[["symbol","identifier","open","dayHigh","dayLow","lastPrice","previousClose","change","pChange","ffmc",
-            #               "yearHigh","yearLow","totalTradedVolume","totalTradedValue","lastUpdateTime","nearWKH","nearWKL",
-            #               "perChange365d","perChange30d"]]
-            #eq_df.set_index("symbol", drop=True, inplace=True)
             eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series"],
                        axis=1,inplace=True)
-            eq.range("G1").value = eq_df
+            eq.range("K1").value = eq_df
+
+            if eq_sym is not None:
+                data = nse.equity_info(eq_sym, trade_info=True)
+                #pprint.pprint(data)
+                bid_list = ask_list = trd_data = []
+                tot_buy = tot_sell = 0
+
+                for key,value in data.items():
+                    if str(key) == "marketDeptOrderBook":
+                        for k,v in value.items():
+                            if str(k) == "bid":
+                                bid_list = v
+                            elif str(k) == "ask":
+                                ask_list = v
+                            elif str(k) == "tradeInfo":
+                                trd_data.append(v)
+                            elif str(k) == "totalBuyQuantity":
+                                tot_buy = v
+                            elif str(k) == "totalSellQuantity":
+                                tot_sell = v
+                        break
+
+                bid_df = pd.DataFrame(bid_list)
+                bid_df.rename(columns={"price":"Bid Price","quantity":"Bid Quantity"},inplace=True)
+                ask_df = pd.DataFrame(ask_list)
+                ask_df.rename(columns={"price":"Ask Price","quantity":"Ask Quantity"},inplace=True)              
+ 
+                bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
+
+                trd_df = pd.DataFrame(trd_data).transpose()
+                eq.range("D5").value = trd_df
+                eq.range("E5").value = None
+                eq.range("F6").value = "Lakhs"
+                eq.range("F7").value = "₹ Cr"
+                eq.range("F8").value = "₹ Cr"
+                eq.range("F9").value = "₹ Cr"
+                eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
+                eq.range("D22").value = "TotalBuyQuantity"
+                eq.range("E22").value = tot_buy
+                eq.range("F22").value = "TotalSellQuantity"
+                eq.range("G22").value = tot_sell
+
         except:
             pass
-     
+    ####################### EquityData Ends ###########################
+
+    ####################### FuturesData Starts ###########################
+    fd_sym = fd.range("E2").value
+    if pre_fd_sym != fd_sym:
+        fd.range("G1:Z100").value = None
+        pre_fd_sym = fd_sym
+    if fd_sym is not None:
+        indices = True if fd_sym == "NIFTY" or fd_sym == "BANKNIFTY" else False
+        try:
+            fd_df = nse.futures_data(fd_sym, indices)
+            #eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series"],
+                       #axis=1,inplace=True)
+            fd.range("G1").value = fd_df
+        except:
+            pass
+    ####################### FuturesData Starts ###########################
 
 
 
