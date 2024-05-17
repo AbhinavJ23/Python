@@ -12,6 +12,7 @@ nse = NSE()
 if not os.path.exists("Nse_Data.xlsx"):
     try:
         wb = xw.Book()
+        wb.sheets.add("DerivedData")
         wb.sheets.add("FuturesData")
         wb.sheets.add("EquityData")
         wb.sheets.add("OptionChain")
@@ -25,41 +26,60 @@ wb = xw.Book("Nse_Data.xlsx")
 oc = wb.sheets("OptionChain")
 eq = wb.sheets("EquityData")
 fd = wb.sheets("FuturesData")
+dd = wb.sheets("DerivedData")
 
 oc.range('1:1').font.bold = True
 oc.range('1:1').color = (211, 211, 211)
+oc.range('C1:C500').color = (211, 211, 211)
+oc.range('G1:G500').color = (211, 211, 211)
+oc.range('C1').column_width = 2
+oc.range('G1').column_width = 2
 eq.range('1:1').font.bold = True
 eq.range('1:1').color = (211, 211, 211)
+eq.range('B1:C500').color = (211, 211, 211)
+eq.range('B1').column_width = 1
+eq.range('C1').column_width = 1
+eq.range('H1').column_width = 2
+eq.range('H1:H500').color = (211, 211, 211)
 fd.range('1:1').font.bold = True
 fd.range('1:1').color = (211, 211, 211)
+dd.range('1:1').font.bold = True
 
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
 df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
 df = df.set_index("FNO Symbol", drop=True)
 oc.range("A1").value = df
+oc.range("A1:A200").autofit()
 oc.range("D2").value, oc.range("D3").value = "Enter Symbol", "Enter Expiry"
+oc.range("D2:E3").autofit()
 pre_oc_sym = pre_oc_exp = ""
 exp_list = []
 
 ######################### Initializing EquityData sheet #######################
-eq.range("A:A").value = eq.range("D5:E30").value = eq.range("K1:AF4000").value = None
+eq.range("A:A").value = eq.range("D5:E30").value = eq.range("I1:AD100").value = None
 eq_df = pd.DataFrame({"Index Symbol":nse.equity_market_categories})
 eq_df = eq_df.set_index("Index Symbol", drop=True)
 eq.range("A1").value = eq_df
+eq.range("A1:A50").autofit()
 eq.range("D2").value, eq.range("D3").value = "Enter Index ", "Enter Equity"
+eq.range("D2:E3").autofit()
 pre_ind_sym = pre_eq_sym = ""
 
 ####################### Initializing FuturesData sheet #######################
-fd.range("A:A").value = fd.range("G1:Z100").value = None
+fd.range("A:A").value = fd.range("G1:AD100").value = None
 fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
 fd_df = fd_df.set_index("FNO Symbol", drop=True)
 fd.range("A1").value = fd_df
+fd.range("A1:A200").autofit()
 fd.range("D2").value = "Enter Index/Equity"
+fd.range("D2").autofit()
 pre_fd_sym = ""
 
 print("Excel is starting....")
 
+row_number = 1
+prev_time = curr_time = ""
 while True:
     time.sleep(1)
 
@@ -82,6 +102,7 @@ while True:
                 df = pd.DataFrame({"Expiry Date": [str(i) for i in sorted(exp_list)]})
                 df = df.set_index("Expiry Date", drop=True)
                 oc.range("B1").value = df
+                oc.range("B1").autofit()
             df = nse.options_data(oc_sym, indices)
             df["expiryDate"] = df["expiryDate"].apply(lambda x: dateutil.parser.parse(x))
             df = df[df["expiryDate"] == oc_exp]
@@ -123,6 +144,7 @@ while True:
                                     ["Max Put Change in OI Strike",
                                      list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
                                     ]
+            oc.range("E6").autofit()
             oc.range("G1").value = df
         except:
             pass
@@ -131,19 +153,33 @@ while True:
 
     ####################### EquityData Starts ###########################
     ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
-    if pre_ind_sym != ind_sym or pre_eq_sym != eq_sym:
-        eq.range("K1:AF1000").value = eq.range("D6:H30").value = None
-        if pre_ind_sym != ind_sym:
-            eq.range("D6:H30").value = eq.range("E3").value = None
-        pre_ind_sym = ind_sym
-        pre_eq_sym = eq_sym 
+    if pre_ind_sym != ind_sym: #or pre_eq_sym != eq_sym:
+        eq.range("I1:AD100").value = eq.range("D6:H30").value = eq.range("E3").value = None
+        dd.clear()
+        row_number = 1
+    if pre_eq_sym != eq_sym:
+        eq.range("D6:H30").value = None
+    pre_ind_sym = ind_sym
+    pre_eq_sym = eq_sym 
     if ind_sym is not None:
         try:
             eq_df = nse.equity_market_data(ind_sym)
-            eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series"],
+            eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series","identifier"],
                        axis=1,inplace=True)
-            eq.range("K1").value = eq_df
-
+            eq_df.index.name = 'symbol'            
+            sorted_idx = eq_df.index.sort_values()
+            eq_df = eq_df.loc[sorted_idx]
+            eq.range("I1").value = eq_df
+            eq.range("D1").value = "Index Timestamp"
+            eq.range("D1").autofit()
+            #time_now = eq_df.iloc[0,'lastUpdateTime']
+            eq.range("E1").value = eq.range("V2").value
+            eq.range("E1").autofit()
+            eq.range("F1").value = "Equity Timestamp"
+            eq.range("F1").autofit()
+            eq.range("G1").value = eq.range("V3").value
+            curr_time = eq.range("G1").value
+            eq.range("G1").autofit()
             if eq_sym is not None:
                 data = nse.equity_info(eq_sym, trade_info=True)
                 #pprint.pprint(data)
@@ -180,11 +216,27 @@ while True:
                 eq.range("F8").value = "₹ Cr"
                 eq.range("F9").value = "₹ Cr"
                 eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
-                eq.range("D22").value = "TotalBuyQuantity"
+                eq.range("D22").value = "TotalBuyQty"
                 eq.range("E22").value = tot_buy
-                eq.range("F22").value = "TotalSellQuantity"
+                eq.range("F22").value = "TotalSellQty"
                 eq.range("G22").value = tot_sell
 
+            ####################### DerivedData ###########################
+            dd.range(f'A{row_number + 1}').font.bold = True
+            if prev_time != curr_time:   
+                dd_df = eq_df.copy()
+                dd_df.drop(["open","dayHigh","dayLow","lastPrice","previousClose","change","pChange","ffmc","yearHigh","yearLow",
+                        "totalTradedValue","lastUpdateTime","nearWKH","nearWKL","perChange365d","perChange30d"], axis=1,inplace=True)                     
+                if row_number == 1:
+                    dd.range("A1").value = dd_df.transpose()
+                    dd.range(f'A{row_number + 1}').value = curr_time              
+                else:
+                    dd.range(f'A{row_number + 1}').value = curr_time
+                    #dd.range(f'B{row_number + 1}:Z{row_number + 1}').number_format = "General"
+                    dd.range(f'B{row_number + 1}').value = dd_df['totalTradedVolume'].to_list()
+                row_number += 1
+
+            prev_time = curr_time            
         except:
             pass
     ####################### EquityData Ends ###########################
@@ -192,7 +244,7 @@ while True:
     ####################### FuturesData Starts ###########################
     fd_sym = fd.range("E2").value
     if pre_fd_sym != fd_sym:
-        fd.range("G1:Z100").value = None
+        fd.range("G1:AD100").value = None
         pre_fd_sym = fd_sym
     if fd_sym is not None:
         indices = True if fd_sym == "NIFTY" or fd_sym == "BANKNIFTY" else False
@@ -203,7 +255,7 @@ while True:
             fd.range("G1").value = fd_df
         except:
             pass
-    ####################### FuturesData Starts ###########################
+    ####################### FuturesData Ends ###########################
 
 
 
