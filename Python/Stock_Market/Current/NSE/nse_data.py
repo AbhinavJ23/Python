@@ -4,7 +4,6 @@ import pandas as pd
 import xlwings as xw
 import dateutil.parser
 import numpy as np
-import pprint
 
 nse = NSE()
 
@@ -12,7 +11,9 @@ nse = NSE()
 if not os.path.exists("Nse_Data.xlsx"):
     try:
         wb = xw.Book()
-        wb.sheets.add("DerivedData")
+        wb.sheets.add("SpotTurnover")
+        wb.sheets.add("SpotVolume")
+        wb.sheets.add("SpotPrice")
         wb.sheets.add("FuturesData")
         wb.sheets.add("EquityData")
         wb.sheets.add("OptionChain")
@@ -26,7 +27,9 @@ wb = xw.Book("Nse_Data.xlsx")
 oc = wb.sheets("OptionChain")
 eq = wb.sheets("EquityData")
 fd = wb.sheets("FuturesData")
-dd = wb.sheets("DerivedData")
+sp = wb.sheets("SpotPrice")
+sv = wb.sheets("SpotVolume")
+st = wb.sheets("SpotTurnover")
 
 oc.range('1:1').font.bold = True
 oc.range('1:1').color = (211, 211, 211)
@@ -43,7 +46,6 @@ eq.range('H1').column_width = 2
 eq.range('H1:H500').color = (211, 211, 211)
 fd.range('1:1').font.bold = True
 fd.range('1:1').color = (211, 211, 211)
-dd.range('1:1').font.bold = True
 
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
@@ -76,13 +78,88 @@ fd.range("D2").value = "Enter Index/Equity"
 fd.range("D2").autofit()
 pre_fd_sym = ""
 
+row_number = 1
+col_number = 2
+prev_time = curr_time = ""
+prev_vol = curr_vol = []
+prev_vol_diff = curr_vol_diff = []
+prev_price = curr_price = []
+prev_price_diff = curr_price_diff = []
+prev_turn = curr_turn = []
+prev_turn_diff = curr_turn_diff = []
+
+############################# Start - Function to get excel column(A1,B1 etc) given a positive number #############################
+alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+def get_col_name(num):
+    if num < 26:
+        return alpha[num-1]
+    else:
+        q, r = num//26, num % 26
+        if r == 0:
+            if q == 1:
+                return alpha[r-1]
+            else:
+                return get_col_name(q-1) + alpha[r-1]
+        else:
+            return get_col_name(q) + alpha[r-1]
+############################# End - Function to get excel column(A1,B1 etc) given a positive number #############################
+
+############################# Start - Function to create Spot sheets #############################
+def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_diff,curr_spot_diff):
+    print("Starting Spot Sheet - ", sh_type," at ", time," for row ", row_number )
+    if sh_type == "Price":
+        spot_df = df[["lastPrice"]]
+        sh = sp
+    elif sh_type == "Volume":
+        spot_df = df[["totalTradedVolume"]]
+        sh = sv
+    elif sh_type == "Turnover":
+        spot_df = df[["totalTradedValue"]]
+        sh = st
+    else:
+        print("Error! Unexpected Input - ", sh_type)
+    
+    sh.range(f'A{row_number + 1}').font.bold = True
+    spot_df1 = spot_df.transpose()
+    col_number = 2
+    iter = 0                
+    for col_name in spot_df1:            
+        if row_number == 1:
+            sh.range(f'{get_col_name(col_number)}' + str(row_number)).options(index=False).value = spot_df1[col_name]            
+            sh.range(f'{get_col_name(col_number+1)}' + str(row_number)).value = "Difference"
+            sh.range(f'{get_col_name(col_number+2)}' + str(row_number)).value = "% Change"
+            sh.range('1:1').font.bold = True
+            sh.range(f'A{row_number + 1}').value = time
+            prev_spot.append(spot_df1[col_name].values)
+        else:                  
+            sh.range(f'A{row_number + 1}').value = time
+            sh.range(f'{get_col_name(col_number)}'+ str(row_number+1)).value = spot_df1[col_name].values
+            curr_spot.append(spot_df1[col_name].values)
+            sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).value = curr_spot[iter] - prev_spot[iter]
+            if row_number == 2:
+                prev_spot_diff.append(curr_spot[iter] - prev_spot[iter])
+            else:
+                curr_spot_diff.append(curr_spot[iter] - prev_spot[iter])
+                per_diff = (curr_spot_diff[iter] - prev_spot_diff[iter])*100/prev_spot_diff[iter]
+                sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = per_diff
+                if sh_type in ("Volume","Turnover"):
+                    if per_diff > 50:
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (0, 255, 0)
+                    elif per_diff < -50:
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (255, 0, 0)
+                elif sh_type in ("Price"):
+                    if per_diff > 0.25:
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (0, 255, 0)
+                    elif per_diff < -0.25:
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (255, 0, 0)                   
+        iter += 1
+        col_number += 3                
+############################# End - Function to create Spot sheets #############################
+
 print("Excel is starting....")
 
-row_number = 1
-prev_time = curr_time = ""
 while True:
     time.sleep(1)
-
     ############################# OptionChain Starts #############################
     oc_sym, oc_exp = oc.range("E2").value, oc.range("E3").value    
     if pre_oc_sym != oc_sym or pre_oc_exp != oc_exp:
@@ -155,8 +232,11 @@ while True:
     ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
     if pre_ind_sym != ind_sym: #or pre_eq_sym != eq_sym:
         eq.range("I1:AD100").value = eq.range("D6:H30").value = eq.range("E3").value = None
-        dd.clear()
+        sv.clear()
+        sp.clear()
+        st.clear()
         row_number = 1
+        col_number = 2
     if pre_eq_sym != eq_sym:
         eq.range("D6:H30").value = None
     pre_ind_sym = ind_sym
@@ -172,7 +252,6 @@ while True:
             eq.range("I1").value = eq_df
             eq.range("D1").value = "Index Timestamp"
             eq.range("D1").autofit()
-            #time_now = eq_df.iloc[0,'lastUpdateTime']
             eq.range("E1").value = eq.range("V2").value
             eq.range("E1").autofit()
             eq.range("F1").value = "Equity Timestamp"
@@ -182,7 +261,6 @@ while True:
             eq.range("G1").autofit()
             if eq_sym is not None:
                 data = nse.equity_info(eq_sym, trade_info=True)
-                #pprint.pprint(data)
                 bid_list = ask_list = trd_data = []
                 tot_buy = tot_sell = 0
 
@@ -221,22 +299,24 @@ while True:
                 eq.range("F22").value = "TotalSellQty"
                 eq.range("G22").value = tot_sell
 
-            ####################### DerivedData ###########################
-            dd.range(f'A{row_number + 1}').font.bold = True
-            if prev_time != curr_time:   
-                dd_df = eq_df.copy()
-                dd_df.drop(["open","dayHigh","dayLow","lastPrice","previousClose","change","pChange","ffmc","yearHigh","yearLow",
-                        "totalTradedValue","lastUpdateTime","nearWKH","nearWKL","perChange365d","perChange30d"], axis=1,inplace=True)                     
-                if row_number == 1:
-                    dd.range("A1").value = dd_df.transpose()
-                    dd.range(f'A{row_number + 1}').value = curr_time              
-                else:
-                    dd.range(f'A{row_number + 1}').value = curr_time
-                    #dd.range(f'B{row_number + 1}:Z{row_number + 1}').number_format = "General"
-                    dd.range(f'B{row_number + 1}').value = dd_df['totalTradedVolume'].to_list()
+            ####################### Start Spot Data (Vol,Price,Turnover) ###########################            
+            if prev_time == curr_time:
+                create_spot_sheets(eq_df,"Price",curr_time,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff)
+                create_spot_sheets(eq_df,"Volume",curr_time,row_number,prev_vol,curr_vol,prev_vol_diff,curr_vol_diff)
+                create_spot_sheets(eq_df,"Turnover",curr_time,row_number,prev_turn,curr_turn,prev_turn_diff,curr_turn_diff)
+                if row_number > 1:
+                    prev_price = curr_price
+                    prev_vol = curr_vol
+                    prev_turn = curr_turn
+                    curr_price = curr_vol = curr_turn = []
+                if row_number > 2:
+                    prev_price_diff = curr_price_diff
+                    prev_vol_diff = curr_vol_diff
+                    prev_turn_diff = curr_turn_diff
+                    curr_price_diff = curr_vol_diff = curr_turn_diff = []
                 row_number += 1
-
-            prev_time = curr_time            
+            prev_time = curr_time          
+            ####################### End - Spot Data (Vol,Price,Turnover) ###########################               
         except:
             pass
     ####################### EquityData Ends ###########################
@@ -250,8 +330,6 @@ while True:
         indices = True if fd_sym == "NIFTY" or fd_sym == "BANKNIFTY" else False
         try:
             fd_df = nse.futures_data(fd_sym, indices)
-            #eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series"],
-                       #axis=1,inplace=True)
             fd.range("G1").value = fd_df
         except:
             pass
