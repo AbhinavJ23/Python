@@ -124,7 +124,8 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
     
     spot_df1 = spot_df.transpose()
     col_number = 2
-    iter = 0                
+    iter = 0
+    per_diff = 0                
     for col_name in spot_df1:            
         if row_number == 1:
             sh.range(f'{get_col_name(col_number)}' + str(row_number)).options(index=False).value = spot_df1[col_name]            
