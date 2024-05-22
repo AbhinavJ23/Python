@@ -118,8 +118,10 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
         sh = st
     else:
         print("Error! Unexpected Input - ", sh_type)
-    
+
+    sh.range('1:1').color = (211, 211, 211)
     sh.range(f'A{row_number + 1}').font.bold = True
+    
     spot_df1 = spot_df.transpose()
     col_number = 2
     iter = 0                
@@ -127,31 +129,48 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
         if row_number == 1:
             sh.range(f'{get_col_name(col_number)}' + str(row_number)).options(index=False).value = spot_df1[col_name]            
             sh.range(f'{get_col_name(col_number+1)}' + str(row_number)).value = "Difference"
-            sh.range(f'{get_col_name(col_number+2)}' + str(row_number)).value = "% Change"
+            if sh_type in ("Volume","Turnover"):
+                sh.range(f'{get_col_name(col_number+2)}' + str(row_number)).value = "% Change"
             sh.range('1:1').font.bold = True
+            sh.range("A1:ZZ1").autofit()
             sh.range(f'A{row_number + 1}').value = time
             prev_spot.append(spot_df1[col_name].values)
         else:                  
             sh.range(f'A{row_number + 1}').value = time
             sh.range(f'{get_col_name(col_number)}'+ str(row_number+1)).value = spot_df1[col_name].values
             curr_spot.append(spot_df1[col_name].values)
-            sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).value = curr_spot[iter] - prev_spot[iter]
+            val_diff = curr_spot[iter] - prev_spot[iter]
+            sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).value = val_diff
             if row_number == 2:
-                prev_spot_diff.append(curr_spot[iter] - prev_spot[iter])
+                prev_spot_diff.append(val_diff)
+                if sh_type in ("Price"):
+                    if val_diff > 0:
+                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = (0, 255, 0)
+                    elif val_diff < 0:
+                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = (255, 0, 0)   
             else:
-                curr_spot_diff.append(curr_spot[iter] - prev_spot[iter])
-                per_diff = (curr_spot_diff[iter] - prev_spot_diff[iter])*100/prev_spot_diff[iter]
-                sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = per_diff
+                curr_spot_diff.append(val_diff)
                 if sh_type in ("Volume","Turnover"):
-                    if per_diff > 50:
+                    if prev_spot_diff[iter] != 0:
+                        per_diff = ((curr_spot_diff[iter] - prev_spot_diff[iter])*100)/prev_spot_diff[iter]
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = per_diff
+                    else:
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = "NA"
+                if sh_type in ("Volume"):
+                    if per_diff > 500:
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (0, 255, 0)
-                    elif per_diff < -50:
+                    elif per_diff < -500:
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (255, 0, 0)
-                elif sh_type in ("Price"):
-                    if per_diff > 0.25:
+                elif sh_type in ("Turnover"):
+                    if per_diff > 250:
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (0, 255, 0)
-                    elif per_diff < -0.25:
+                    elif per_diff < -250:
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (255, 0, 0)                   
+                elif sh_type in ("Price"):
+                    if val_diff > 0:
+                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = (0, 255, 0)
+                    elif val_diff < 0:
+                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = (255, 0, 0)                  
         iter += 1
         col_number += 3                
 ############################# End - Function to create Spot sheets #############################
@@ -300,7 +319,7 @@ while True:
                 eq.range("G22").value = tot_sell
 
             ####################### Start Spot Data (Vol,Price,Turnover) ###########################            
-            if prev_time == curr_time:
+            if prev_time != curr_time:
                 create_spot_sheets(eq_df,"Price",curr_time,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff)
                 create_spot_sheets(eq_df,"Volume",curr_time,row_number,prev_vol,curr_vol,prev_vol_diff,curr_vol_diff)
                 create_spot_sheets(eq_df,"Turnover",curr_time,row_number,prev_turn,curr_turn,prev_turn_diff,curr_turn_diff)
@@ -308,12 +327,16 @@ while True:
                     prev_price = curr_price
                     prev_vol = curr_vol
                     prev_turn = curr_turn
-                    curr_price = curr_vol = curr_turn = []
+                curr_price = []
+                curr_vol = []
+                curr_turn = []
                 if row_number > 2:
                     prev_price_diff = curr_price_diff
                     prev_vol_diff = curr_vol_diff
                     prev_turn_diff = curr_turn_diff
-                    curr_price_diff = curr_vol_diff = curr_turn_diff = []
+                curr_price_diff = []
+                curr_vol_diff = []
+                curr_turn_diff = []
                 row_number += 1
             prev_time = curr_time          
             ####################### End - Spot Data (Vol,Price,Turnover) ###########################               
