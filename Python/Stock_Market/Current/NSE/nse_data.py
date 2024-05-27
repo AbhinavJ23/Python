@@ -4,6 +4,8 @@ import pandas as pd
 import xlwings as xw
 import dateutil.parser
 import numpy as np
+import copy
+from datetime import datetime, timedelta
 
 nse = NSE()
 
@@ -11,6 +13,7 @@ nse = NSE()
 if not os.path.exists("Nse_Data.xlsx"):
     try:
         wb = xw.Book()
+        wb.sheets.add("MaxVolume")
         wb.sheets.add("SpotTurnover")
         wb.sheets.add("SpotVolume")
         wb.sheets.add("SpotPrice")
@@ -30,6 +33,7 @@ fd = wb.sheets("FuturesData")
 sp = wb.sheets("SpotPrice")
 sv = wb.sheets("SpotVolume")
 st = wb.sheets("SpotTurnover")
+mv = wb.sheets("MaxVolume")
 
 oc.range('1:1').font.bold = True
 oc.range('1:1').color = (211, 211, 211)
@@ -80,6 +84,8 @@ pre_fd_sym = ""
 
 row_number = 1
 col_number = 2
+col_number_1 = 1
+prev_temp_dict = {}
 prev_time = curr_time = ""
 prev_vol = curr_vol = []
 prev_vol_diff = curr_vol_diff = []
@@ -87,6 +93,7 @@ prev_price = curr_price = []
 prev_price_diff = curr_price_diff = []
 prev_turn = curr_turn = []
 prev_turn_diff = curr_turn_diff = []
+flag = False
 
 ############################# Start - Function to get excel column(A1,B1 etc) given a positive number #############################
 alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -137,10 +144,13 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
             sh.range(f'A{row_number + 1}').value = time
             prev_spot.append(spot_df1[col_name].values)
         else:                  
-            sh.range(f'A{row_number + 1}').value = time
+            sh.range(f'A{row_number + 1}').value = time.strftime('%H:%M:%S')
             sh.range(f'{get_col_name(col_number)}'+ str(row_number+1)).value = spot_df1[col_name].values
-            curr_spot.append(spot_df1[col_name].values)
-            val_diff = curr_spot[iter] - prev_spot[iter]
+            curr_spot.append(spot_df1[col_name].values)            
+            if curr_spot[iter] is not None and prev_spot[iter] is not None:
+                val_diff = curr_spot[iter] - prev_spot[iter]                
+            else:
+                val_diff = 0
             sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).value = val_diff
             if row_number == 2:
                 prev_spot_diff.append(val_diff)
@@ -255,6 +265,7 @@ while True:
         sv.clear()
         sp.clear()
         st.clear()
+        mv.clear()
         row_number = 1
         col_number = 2
     if pre_eq_sym != eq_sym:
@@ -272,7 +283,7 @@ while True:
             eq.range("I1").value = eq_df
             eq.range("D1").value = "Index Timestamp"
             eq.range("D1").autofit()
-            eq.range("E1").value = eq.range("V2").value
+            eq.range("E1").value = eq.range("V36").value
             eq.range("E1").autofit()
             eq.range("F1").value = "Equity Timestamp"
             eq.range("F1").autofit()
@@ -319,7 +330,7 @@ while True:
                 eq.range("F22").value = "TotalSellQty"
                 eq.range("G22").value = tot_sell
 
-            ####################### Start Spot Data (Vol,Price,Turnover) ###########################            
+            ####################### Start Spot Data (Vol,Price,Turnover) ###########################
             if prev_time != curr_time:
                 create_spot_sheets(eq_df,"Price",curr_time,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff)
                 create_spot_sheets(eq_df,"Volume",curr_time,row_number,prev_vol,curr_vol,prev_vol_diff,curr_vol_diff)
@@ -339,7 +350,40 @@ while True:
                 curr_vol_diff = []
                 curr_turn_diff = []
                 row_number += 1
-            prev_time = curr_time          
+                flag = False
+
+            ## Printing MaxVolume Data ##
+            else:
+                if flag == False:                                        
+                    temp_dict = {'Name':'Value'}
+                    vol_df = pd.DataFrame(sv.range("A1").expand().value)
+                    stock_name = ""                  
+                    for column in vol_df.columns:
+                        i = 0       
+                        if column > 0:
+                            temp_list = vol_df.loc[:,column].tolist()
+                            if column % 3 == 1:                                
+                                stock_name = temp_list[0]
+                            elif column % 3 == 0:                          
+                                for value in temp_list:
+                                    if ((i > 0) and (value is not None) and value != "NA" and (value > 500 or value < -500)):
+                                        temp_dict.update({stock_name:value})
+                                    i += 1
+
+                    temp_dict_1 = dict(temp_dict.items() - prev_temp_dict.items())
+                    temp_keys = list(temp_dict_1.keys())
+                    temp_keys.sort()
+                    temp_dict_1 = {i: temp_dict_1[i] for i in temp_keys}                
+                    prev_temp_dict = copy.deepcopy(temp_dict)                  
+                    if temp_dict_1:                    
+                        temp_df = pd.DataFrame(list(temp_dict_1.items()))                        
+                        mv.range(f'{get_col_name(col_number_1)}' + '1').value = curr_time.strftime("%H:%M:%S")
+                        mv.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True
+                        mv.range(f'{get_col_name(col_number_1)}' + '2').options(index=False, header=False).value = temp_df
+                        print("Max Volume Data Written")
+                        flag = True
+                        col_number_1 += 2
+            prev_time = curr_time
             ####################### End - Spot Data (Vol,Price,Turnover) ###########################               
         except:
             pass
