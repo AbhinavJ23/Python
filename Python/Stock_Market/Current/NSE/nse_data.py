@@ -6,6 +6,7 @@ import dateutil.parser
 import numpy as np
 import copy
 from datetime import datetime, timedelta
+import threading
 
 nse = NSE()
 
@@ -13,7 +14,7 @@ nse = NSE()
 if not os.path.exists("Nse_Data.xlsx"):
     try:
         wb = xw.Book()
-        wb.sheets.add("MaxVolume")
+        wb.sheets.add("MaxVolumeTurnOver")
         wb.sheets.add("SpotTurnover")
         wb.sheets.add("SpotVolume")
         wb.sheets.add("SpotPrice")
@@ -33,7 +34,7 @@ fd = wb.sheets("FuturesData")
 sp = wb.sheets("SpotPrice")
 sv = wb.sheets("SpotVolume")
 st = wb.sheets("SpotTurnover")
-mv = wb.sheets("MaxVolume")
+mv = wb.sheets("MaxVolumeTurnover")
 
 oc.range('1:1').font.bold = True
 oc.range('1:1').color = (211, 211, 211)
@@ -93,7 +94,6 @@ prev_price = curr_price = []
 prev_price_diff = curr_price_diff = []
 prev_turn = curr_turn = []
 prev_turn_diff = curr_turn_diff = []
-flag = False
 
 ############################# Start - Function to get excel column(A1,B1 etc) given a positive number #############################
 alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -112,7 +112,7 @@ def get_col_name(num):
 ############################# End - Function to get excel column(A1,B1 etc) given a positive number #############################
 
 ############################# Start - Function to create Spot sheets #############################
-def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_diff,curr_spot_diff):
+def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_diff,curr_spot_diff,col_number_1,stock_list):
     print("Starting Spot Sheet - ", sh_type," at ", time," for row ", row_number )
     if sh_type == "Price":
         spot_df = df[["lastPrice"]]
@@ -132,7 +132,9 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
     spot_df1 = spot_df.transpose()
     col_number = 2
     iter = 0
-    per_diff = 0                
+    per_diff = 0    
+    vol_list = []
+    turn_list = []       
     for col_name in spot_df1:            
         if row_number == 1:
             sh.range(f'{get_col_name(col_number)}' + str(row_number)).options(index=False).value = spot_df1[col_name]            
@@ -150,11 +152,11 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
             if curr_spot[iter] is not None and prev_spot[iter] is not None:
                 val_diff = curr_spot[iter] - prev_spot[iter]                
             else:
-                val_diff = 0
+                val_diff = 0      
             sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).value = val_diff
             if row_number == 2:
                 prev_spot_diff.append(val_diff)
-                if sh_type in ("Price"):
+                if sh_type == "Price":
                     if val_diff > 0:
                         sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = (0, 255, 0)
                     elif val_diff < 0:
@@ -167,23 +169,52 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = per_diff
                     else:
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = "NA"
-                if sh_type in ("Volume"):
+                if sh_type == "Volume":
                     if per_diff > 500:
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (0, 255, 0)
                     elif per_diff < -500:
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (255, 0, 0)
-                elif sh_type in ("Turnover"):
+
+                    if per_diff > 500 or per_diff < -500:                        
+                        stock_list.append(col_name)
+                        print("Stock List ", stock_list)                        
+                        vol_list.append(per_diff)
+                        print("Vol List ", vol_list)
+
+                elif sh_type == "Turnover":
                     if per_diff > 250:
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (0, 255, 0)
                     elif per_diff < -250:
-                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (255, 0, 0)                   
-                elif sh_type in ("Price"):
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (255, 0, 0)
+                    
+                    if col_name in stock_list:
+                        temp_val_diff = val_diff/10000000                       
+                        turn_list.append(temp_val_diff)                            
+                        print("turn list", turn_list)
+
+                elif sh_type == "Price":
                     if val_diff > 0:
                         sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = (0, 255, 0)
                     elif val_diff < 0:
                         sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = (255, 0, 0)                  
         iter += 1
-        col_number += 3                
+        col_number += 3
+
+    if sh_type == "Volume" and stock_list:        
+        print("in Volume - Stock List - ", stock_list)
+        temp_vol_df = pd.DataFrame(vol_list, index=stock_list, columns=['Vol%Diff'])        
+        mv.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
+        mv.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True          
+        mv.range(f'{get_col_name(col_number_1)}' + '2').value = temp_vol_df
+        mv.range(f'{get_col_name(col_number_1+1)}' + '2').font.bold = True        
+        print("Max Volume Printed")
+    elif sh_type == "Turnover" and turn_list:        
+        print("In Turnover - Stock List - ", stock_list)
+        temp_turn_df = pd.DataFrame(turn_list, columns=['Turnover(Cr)'])        
+        mv.range(f'{get_col_name(col_number_1+2)}' + '2').options(index=False).value = temp_turn_df
+        mv.range(f'{get_col_name(col_number_1+2)}' + '2').font.bold = True
+        mv.range(f'{get_col_name(col_number_1+2)}' + '2').autofit()
+        print("Max Turnover Printed")           
 ############################# End - Function to create Spot sheets #############################
 
 print("Excel is starting....")
@@ -330,11 +361,14 @@ while True:
                 eq.range("F22").value = "TotalSellQty"
                 eq.range("G22").value = tot_sell
 
-            ####################### Start Spot Data (Vol,Price,Turnover) ###########################
+            ####################### Start - Spot Data (Price,Volume,Turnover) ###########################
             if prev_time != curr_time:
-                create_spot_sheets(eq_df,"Price",curr_time,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff)
-                create_spot_sheets(eq_df,"Volume",curr_time,row_number,prev_vol,curr_vol,prev_vol_diff,curr_vol_diff)
-                create_spot_sheets(eq_df,"Turnover",curr_time,row_number,prev_turn,curr_turn,prev_turn_diff,curr_turn_diff)
+                stock_list = []
+                create_spot_sheets(eq_df,"Price",curr_time,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff,col_number_1,stock_list)                               
+                create_spot_sheets(eq_df,"Volume",curr_time,row_number,prev_vol,curr_vol,prev_vol_diff,curr_vol_diff,col_number_1,stock_list)
+                create_spot_sheets(eq_df,"Turnover",curr_time,row_number,prev_turn,curr_turn,prev_turn_diff,curr_turn_diff,col_number_1,stock_list)
+                if row_number > 2 and stock_list:
+                    col_number_1 += 3
                 if row_number > 1:
                     prev_price = curr_price
                     prev_vol = curr_vol
@@ -350,41 +384,9 @@ while True:
                 curr_vol_diff = []
                 curr_turn_diff = []
                 row_number += 1
-                flag = False
-
-            ## Printing MaxVolume Data ##
-            else:
-                if flag == False:                                        
-                    temp_dict = {'Name':'Value'}
-                    vol_df = pd.DataFrame(sv.range("A1").expand().value)
-                    stock_name = ""                  
-                    for column in vol_df.columns:
-                        i = 0       
-                        if column > 0:
-                            temp_list = vol_df.loc[:,column].tolist()
-                            if column % 3 == 1:                                
-                                stock_name = temp_list[0]
-                            elif column % 3 == 0:                          
-                                for value in temp_list:
-                                    if ((i > 0) and (value is not None) and value != "NA" and (value > 500 or value < -500)):
-                                        temp_dict.update({stock_name:value})
-                                    i += 1
-
-                    temp_dict_1 = dict(temp_dict.items() - prev_temp_dict.items())
-                    temp_keys = list(temp_dict_1.keys())
-                    temp_keys.sort()
-                    temp_dict_1 = {i: temp_dict_1[i] for i in temp_keys}                
-                    prev_temp_dict = copy.deepcopy(temp_dict)                  
-                    if temp_dict_1:                    
-                        temp_df = pd.DataFrame(list(temp_dict_1.items()))                        
-                        mv.range(f'{get_col_name(col_number_1)}' + '1').value = curr_time.strftime("%H:%M:%S")
-                        mv.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True
-                        mv.range(f'{get_col_name(col_number_1)}' + '2').options(index=False, header=False).value = temp_df
-                        print("Max Volume Data Written")
-                        flag = True
-                        col_number_1 += 2
+                    
             prev_time = curr_time
-            ####################### End - Spot Data (Vol,Price,Turnover) ###########################               
+            ####################### End - Spot Data (Price,Volume,Turnover) ###########################               
         except:
             pass
     ####################### EquityData Ends ###########################
