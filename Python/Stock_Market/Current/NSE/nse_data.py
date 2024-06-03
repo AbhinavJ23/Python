@@ -14,7 +14,7 @@ nse = NSE()
 if not os.path.exists("Nse_Data.xlsx"):
     try:
         wb = xw.Book()
-        wb.sheets.add("MaxVolumeTurnOver")
+        wb.sheets.add("MaxVolumeTurnover")
         wb.sheets.add("SpotTurnover")
         wb.sheets.add("SpotVolume")
         wb.sheets.add("SpotPrice")
@@ -113,7 +113,7 @@ def get_col_name(num):
 
 ############################# Start - Function to create Spot sheets #############################
 def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_diff,curr_spot_diff,col_number_1,stock_list):
-    print("Starting Spot Sheet - ", sh_type," at ", time," for row ", row_number )
+    print("Printing Spot Sheet - ", sh_type," at ", time," for row ", row_number )
     if sh_type == "Price":
         spot_df = df[["lastPrice"]]
         sh = sp
@@ -176,10 +176,8 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (255, 0, 0)
 
                     if per_diff > 500 or per_diff < -500:                        
-                        stock_list.append(col_name)
-                        print("Stock List ", stock_list)                        
+                        stock_list.append(col_name)                     
                         vol_list.append(per_diff)
-                        print("Vol List ", vol_list)
 
                 elif sh_type == "Turnover":
                     if per_diff > 250:
@@ -187,10 +185,12 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
                     elif per_diff < -250:
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (255, 0, 0)
                     
-                    if col_name in stock_list:
-                        temp_val_diff = val_diff/10000000                       
-                        turn_list.append(temp_val_diff)                            
-                        print("turn list", turn_list)
+                    temp_val_diff = val_diff/10000000
+                    if col_name in stock_list:                                             
+                        turn_list.append(temp_val_diff)                       
+                    elif col_name not in nse.equity_market_categories and val_diff > 50000000:
+                        stock_list.append(col_name)
+                        turn_list.append(temp_val_diff)
 
                 elif sh_type == "Price":
                     if val_diff > 0:
@@ -200,21 +200,34 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
         iter += 1
         col_number += 3
 
-    if sh_type == "Volume" and stock_list:        
-        print("in Volume - Stock List - ", stock_list)
-        temp_vol_df = pd.DataFrame(vol_list, index=stock_list, columns=['Vol%Diff'])        
+    if sh_type in ("Volume","Turnover") and row_number >= 2:
         mv.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
-        mv.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True          
-        mv.range(f'{get_col_name(col_number_1)}' + '2').value = temp_vol_df
-        mv.range(f'{get_col_name(col_number_1+1)}' + '2').font.bold = True        
-        print("Max Volume Printed")
-    elif sh_type == "Turnover" and turn_list:        
-        print("In Turnover - Stock List - ", stock_list)
-        temp_turn_df = pd.DataFrame(turn_list, columns=['Turnover(Cr)'])        
-        mv.range(f'{get_col_name(col_number_1+2)}' + '2').options(index=False).value = temp_turn_df
-        mv.range(f'{get_col_name(col_number_1+2)}' + '2').font.bold = True
-        mv.range(f'{get_col_name(col_number_1+2)}' + '2').autofit()
-        print("Max Turnover Printed")           
+        mv.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True 
+
+        if sh_type == "Volume":
+            if stock_list:        
+                print("in Volume - Stock List - ", stock_list)
+                temp_vol_df = pd.DataFrame(vol_list, index=stock_list, columns=['Vol%Diff'])        
+                mv.range(f'{get_col_name(col_number_1)}' + '2').value = temp_vol_df
+            else:
+                mv.range(f'{get_col_name(col_number_1+1)}' + '2').value = "Vol%Diff"
+            mv.range(f'{get_col_name(col_number_1)}' + '2').value = "Name"
+            mv.range(f'{get_col_name(col_number_1)}' + '2').font.bold = True
+            mv.range(f'{get_col_name(col_number_1+1)}' + '2').font.bold = True              
+            print("Max Volume Printed")
+        elif sh_type == "Turnover":
+            if turn_list:
+                stock_list.sort()        
+                print("In Turnover - Stock List - ", stock_list)
+                temp_turn_df = pd.DataFrame(turn_list, index=stock_list, columns=['Turnover(₹ Cr)'])  
+                mv.range(f'{get_col_name(col_number_1+2)}' + '2').value = temp_turn_df
+            else:
+                mv.range(f'{get_col_name(col_number_1+3)}' + '2').value = "Turnover(₹ Cr)"
+            mv.range(f'{get_col_name(col_number_1+2)}' + '2').value = "Name"
+            mv.range(f'{get_col_name(col_number_1+2)}' + '2').font.bold = True
+            mv.range(f'{get_col_name(col_number_1+3)}' + '2').font.bold = True
+            mv.range(f'{get_col_name(col_number_1+3)}' + '2').autofit()
+            print("Max Turnover Printed")           
 ############################# End - Function to create Spot sheets #############################
 
 print("Excel is starting....")
@@ -364,11 +377,13 @@ while True:
             ####################### Start - Spot Data (Price,Volume,Turnover) ###########################
             if prev_time != curr_time:
                 stock_list = []
+                vol_flag = False
+                turn_flag = False
                 create_spot_sheets(eq_df,"Price",curr_time,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff,col_number_1,stock_list)                               
                 create_spot_sheets(eq_df,"Volume",curr_time,row_number,prev_vol,curr_vol,prev_vol_diff,curr_vol_diff,col_number_1,stock_list)
                 create_spot_sheets(eq_df,"Turnover",curr_time,row_number,prev_turn,curr_turn,prev_turn_diff,curr_turn_diff,col_number_1,stock_list)
-                if row_number > 2 and stock_list:
-                    col_number_1 += 3
+                if row_number >= 2:
+                    col_number_1 += 4
                 if row_number > 1:
                     prev_price = curr_price
                     prev_vol = curr_vol
@@ -383,8 +398,7 @@ while True:
                 curr_price_diff = []
                 curr_vol_diff = []
                 curr_turn_diff = []
-                row_number += 1
-                    
+                row_number += 1                    
             prev_time = curr_time
             ####################### End - Spot Data (Price,Volume,Turnover) ###########################               
         except:
