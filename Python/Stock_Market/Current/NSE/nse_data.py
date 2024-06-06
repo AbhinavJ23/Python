@@ -4,9 +4,13 @@ import pandas as pd
 import xlwings as xw
 import dateutil.parser
 import numpy as np
-import copy
 from datetime import datetime, timedelta
-import threading
+import logging
+
+####################### Initializing Logging #######################
+logging.basicConfig(filename='Nse_Data.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger()
+####################### Initializing Logging End #######################
 
 nse = NSE()
 
@@ -23,6 +27,7 @@ if not os.path.exists("Nse_Data.xlsx"):
         wb.sheets.add("OptionChain")
         wb.save("Nse_Data.xlsx")
         wb.close()
+        logger.debug("Created Excel - Nse_Data.xlsx")
     except Exception as e:
         print(f'Error Creating Excel {e}')
         sys.exit()
@@ -52,9 +57,13 @@ eq.range('H1:H500').color = (211, 211, 211)
 fd.range('1:1').font.bold = True
 fd.range('1:1').color = (211, 211, 211)
 
+logger.debug("Excel initialized")
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
-df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
+try:    
+    df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
+except Exception as e:
+    logger.critical(f'Error FNO symbols for Options Data {e}')
 df = df.set_index("FNO Symbol", drop=True)
 oc.range("A1").value = df
 oc.range("A1:A200").autofit()
@@ -62,6 +71,7 @@ oc.range("D2").value, oc.range("D3").value = "Enter Symbol", "Enter Expiry"
 oc.range("D2:E3").autofit()
 pre_oc_sym = pre_oc_exp = ""
 exp_list = []
+logger.debug("OptionChain sheet initialized")
 
 ######################### Initializing EquityData sheet #######################
 eq.range("A:A").value = eq.range("D5:E30").value = eq.range("I1:AD100").value = None
@@ -72,16 +82,21 @@ eq.range("A1:A50").autofit()
 eq.range("D2").value, eq.range("D3").value = "Enter Index ", "Enter Equity"
 eq.range("D2:E3").autofit()
 pre_ind_sym = pre_eq_sym = ""
+logger.debug("EquityData sheet initialized")
 
 ####################### Initializing FuturesData sheet #######################
 fd.range("A:A").value = fd.range("G1:AD100").value = None
-fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
+try:
+    fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
+except Exception as e:
+    logger.critical(f'Error FNO symbols for Futures Data {e}')
 fd_df = fd_df.set_index("FNO Symbol", drop=True)
 fd.range("A1").value = fd_df
 fd.range("A1:A200").autofit()
 fd.range("D2").value = "Enter Index/Equity"
 fd.range("D2").autofit()
 pre_fd_sym = ""
+logger.debug("FuturesData sheet initialized")
 
 row_number = 1
 col_number = 2
@@ -113,7 +128,7 @@ def get_col_name(num):
 
 ############################# Start - Function to create Spot sheets #############################
 def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_diff,curr_spot_diff,col_number_1,stock_list):
-    print("Printing Spot Sheet - ", sh_type," at ", time," for row ", row_number )
+    logger.debug(f'Printing Spot Sheet - {sh_type} for {time} and row {row_number}')
     if sh_type == "Price":
         spot_df = df[["lastPrice"]]
         sh = sp
@@ -124,7 +139,7 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
         spot_df = df[["totalTradedValue"]]
         sh = st
     else:
-        print("Error! Unexpected Input - ", sh_type)
+        logger.error(f'Error! Unexpected Input - {sh_type}')
 
     sh.range('1:1').color = (211, 211, 211)
     sh.range(f'A{row_number + 1}').font.bold = True
@@ -135,7 +150,10 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
     per_diff = 0    
     vol_list = []
     turn_list = []       
-    for col_name in spot_df1:            
+    for col_name in spot_df1:
+        spot_value = spot_df1[col_name].values
+        if spot_value is None:
+            spot_value = np.zeros(1) 
         if row_number == 1:
             sh.range(f'{get_col_name(col_number)}' + str(row_number)).options(index=False).value = spot_df1[col_name]            
             sh.range(f'{get_col_name(col_number+1)}' + str(row_number)).value = "Difference"
@@ -144,14 +162,19 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
             sh.range('1:1').font.bold = True
             sh.range("A1:ZZ1").autofit()
             sh.range(f'A{row_number + 1}').value = time
-            prev_spot.append(spot_df1[col_name].values)
+            prev_spot.append(spot_value)
         else:                  
             sh.range(f'A{row_number + 1}').value = time.strftime('%H:%M:%S')
-            sh.range(f'{get_col_name(col_number)}'+ str(row_number+1)).value = spot_df1[col_name].values
-            curr_spot.append(spot_df1[col_name].values)            
+            sh.range(f'{get_col_name(col_number)}'+ str(row_number+1)).value = spot_value
+            curr_spot.append(spot_value)            
             if curr_spot[iter] is not None and prev_spot[iter] is not None:
                 val_diff = curr_spot[iter] - prev_spot[iter]                
             else:
+                val_diff = 0
+            if sh_type in ("Volume","Turnover") and val_diff < 0:
+                ## This indicates some data issue from NSE
+                logger.warning("Potential Data Issue from NSE!!")
+                logger.debug(f'For Time {time} - In {sh_type} sheet for {col_name}, current value can not be less than previous value. Hence setting difference between current and previous value as zero')
                 val_diff = 0      
             sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).value = val_diff
             if row_number == 2:
@@ -165,9 +188,12 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
                 curr_spot_diff.append(val_diff)
                 if sh_type in ("Volume","Turnover"):
                     if prev_spot_diff[iter] != 0:
+                        ## Calculate percentage difference only if denominator is not zero
                         per_diff = ((curr_spot_diff[iter] - prev_spot_diff[iter])*100)/prev_spot_diff[iter]
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = per_diff
                     else:
+                        logger.warning("Division by Zero occurred!!")
+                        logger.debug(f'For Time {time} - Avoiding division by zero in {sh_type} sheet for {col_name}')
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = "NA"
                 if sh_type == "Volume":
                     if per_diff > 500:
@@ -206,19 +232,19 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
 
         if sh_type == "Volume":
             if stock_list:        
-                print("in Volume - Stock List - ", stock_list)
+                logger.debug(f'For Max Volume, Stock List is - {stock_list}')
                 temp_vol_df = pd.DataFrame(vol_list, index=stock_list, columns=['Vol%Diff'])        
                 mv.range(f'{get_col_name(col_number_1)}' + '2').value = temp_vol_df
             else:
                 mv.range(f'{get_col_name(col_number_1+1)}' + '2').value = "Vol%Diff"
             mv.range(f'{get_col_name(col_number_1)}' + '2').value = "Name"
             mv.range(f'{get_col_name(col_number_1)}' + '2').font.bold = True
-            mv.range(f'{get_col_name(col_number_1+1)}' + '2').font.bold = True              
-            print("Max Volume Printed")
+            mv.range(f'{get_col_name(col_number_1+1)}' + '2').font.bold = True            
+            logger.debug("Max Volume Printed")
         elif sh_type == "Turnover":
             if turn_list:
                 stock_list.sort()        
-                print("In Turnover - Stock List - ", stock_list)
+                logger.debug(f'For Max Turnover, Stock List is - {stock_list}')
                 temp_turn_df = pd.DataFrame(turn_list, index=stock_list, columns=['Turnover(₹ Cr)'])  
                 mv.range(f'{get_col_name(col_number_1+2)}' + '2').value = temp_turn_df
             else:
@@ -227,10 +253,8 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
             mv.range(f'{get_col_name(col_number_1+2)}' + '2').font.bold = True
             mv.range(f'{get_col_name(col_number_1+3)}' + '2').font.bold = True
             mv.range(f'{get_col_name(col_number_1+3)}' + '2').autofit()
-            print("Max Turnover Printed")           
+            logger.debug("Max Turnover Printed")           
 ############################# End - Function to create Spot sheets #############################
-
-print("Excel is starting....")
 
 while True:
     time.sleep(1)
