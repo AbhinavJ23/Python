@@ -4,11 +4,11 @@ import pandas as pd
 import xlwings as xw
 import dateutil.parser
 import numpy as np
-from datetime import datetime, timedelta
+import time
 import logging
 
-####################### Initializing Logging #######################
-logging.basicConfig(filename='Nse_Data.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+####################### Initializing Logging Start #######################
+logging.basicConfig(filename='Nse_Data_'+time.strftime('%Y%m%d')+'.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger()
 ####################### Initializing Logging End #######################
 
@@ -41,29 +41,40 @@ sv = wb.sheets("SpotVolume")
 st = wb.sheets("SpotTurnover")
 mv = wb.sheets("MaxVolumeTurnover")
 
+####################### Initializing Constants #######################
+COLOR_GREY = (211, 211, 211)
+COLOR_GREEN = (0, 255, 0)
+COLOR_RED = (255, 0, 0)
+COLOR_YELLOW = (255, 255, 0)
+MAX_VOLUME_PERCENT_DIFF = 500
+MAX_TURNOVER_PERCENT_DIFF = 250
+MAX_TURNOVER_VALUE_DIFF = 50000000
+ONE_CRORE = 10000000
+
+####################### Initializing Excel Sheets #######################
 oc.range('1:1').font.bold = True
-oc.range('1:1').color = (211, 211, 211)
-oc.range('C1:C500').color = (211, 211, 211)
-oc.range('G1:G500').color = (211, 211, 211)
+oc.range('1:1').color = COLOR_GREY
+oc.range('C1:C500').color = COLOR_GREY
+oc.range('G1:G500').color = COLOR_GREY
 oc.range('C1').column_width = 2
 oc.range('G1').column_width = 2
 eq.range('1:1').font.bold = True
-eq.range('1:1').color = (211, 211, 211)
-eq.range('B1:C500').color = (211, 211, 211)
+eq.range('1:1').color = COLOR_GREY
+eq.range('B1:C500').color = COLOR_GREY
 eq.range('B1').column_width = 1
 eq.range('C1').column_width = 1
 eq.range('H1').column_width = 2
-eq.range('H1:H500').color = (211, 211, 211)
+eq.range('H1:H500').color = COLOR_GREY
 fd.range('1:1').font.bold = True
-fd.range('1:1').color = (211, 211, 211)
+fd.range('1:1').color = COLOR_GREY
+logger.debug("Excel sheets initialized")
 
-logger.debug("Excel initialized")
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
 try:    
     df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
 except Exception as e:
-    logger.critical(f'Error FNO symbols for Options Data {e}')
+    logger.critical(f'Error getting FNO symbols for Options Data {e}')
 df = df.set_index("FNO Symbol", drop=True)
 oc.range("A1").value = df
 oc.range("A1:A200").autofit()
@@ -89,7 +100,7 @@ fd.range("A:A").value = fd.range("G1:AD100").value = None
 try:
     fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
 except Exception as e:
-    logger.critical(f'Error FNO symbols for Futures Data {e}')
+    logger.critical(f'Error getting FNO symbols for Futures Data {e}')
 fd_df = fd_df.set_index("FNO Symbol", drop=True)
 fd.range("A1").value = fd_df
 fd.range("A1:A200").autofit()
@@ -98,6 +109,7 @@ fd.range("D2").autofit()
 pre_fd_sym = ""
 logger.debug("FuturesData sheet initialized")
 
+####################### Initializing Global Variables #######################
 row_number = 1
 col_number = 2
 col_number_1 = 1
@@ -124,7 +136,7 @@ def get_col_name(num):
                 return get_col_name(q-1) + alpha[r-1]
         else:
             return get_col_name(q) + alpha[r-1]
-############################# End - Function to get excel column(A1,B1 etc) given a positive number #############################
+############################# End - Function to get excel column(A1,B1 etc) given a positive integer #############################
 
 ############################# Start - Function to create Spot sheets #############################
 def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_diff,curr_spot_diff,col_number_1,stock_list):
@@ -141,7 +153,7 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
     else:
         logger.error(f'Error! Unexpected Input - {sh_type}')
 
-    sh.range('1:1').color = (211, 211, 211)
+    sh.range('1:1').color = COLOR_GREY
     sh.range(f'A{row_number + 1}').font.bold = True
     
     spot_df1 = spot_df.transpose()
@@ -170,20 +182,20 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
             if curr_spot[iter] is not None and prev_spot[iter] is not None:
                 val_diff = curr_spot[iter] - prev_spot[iter]                
             else:
-                val_diff = 0
+                val_diff = np.zeros(1)
             if sh_type in ("Volume","Turnover") and val_diff < 0:
                 ## This indicates some data issue from NSE
                 logger.warning("Potential Data Issue from NSE!!")
                 logger.debug(f'For Time {time} - In {sh_type} sheet for {col_name}, current value can not be less than previous value. Hence setting difference between current and previous value as zero')
-                val_diff = 0      
+                val_diff = np.zeros(1)
             sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).value = val_diff
             if row_number == 2:
                 prev_spot_diff.append(val_diff)
                 if sh_type == "Price":
                     if val_diff > 0:
-                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = (0, 255, 0)
+                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_GREEN
                     elif val_diff < 0:
-                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = (255, 0, 0)   
+                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED
             else:
                 curr_spot_diff.append(val_diff)
                 if sh_type in ("Volume","Turnover"):
@@ -195,44 +207,49 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
                         logger.warning("Division by Zero occurred!!")
                         logger.debug(f'For Time {time} - Avoiding division by zero in {sh_type} sheet for {col_name}')
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = "NA"
-                if sh_type == "Volume":
-                    if per_diff > 500:
-                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (0, 255, 0)
-                    elif per_diff < -500:
-                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (255, 0, 0)
+                        per_diff = np.zeros(1)
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_YELLOW
 
-                    if per_diff > 500 or per_diff < -500:                        
+                if sh_type == "Volume":
+                    if per_diff > MAX_VOLUME_PERCENT_DIFF:
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_GREEN
+                    elif per_diff < -MAX_VOLUME_PERCENT_DIFF:
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_RED
+
+                    if per_diff > MAX_VOLUME_PERCENT_DIFF or per_diff < -MAX_VOLUME_PERCENT_DIFF:                        
                         stock_list.append(col_name)                     
                         vol_list.append(per_diff)
 
                 elif sh_type == "Turnover":
-                    if per_diff > 250:
-                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (0, 255, 0)
-                    elif per_diff < -250:
-                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = (255, 0, 0)
+                    if per_diff > MAX_TURNOVER_PERCENT_DIFF:
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_GREEN
+                    elif per_diff < -MAX_TURNOVER_PERCENT_DIFF:
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_RED
                     
-                    temp_val_diff = val_diff/10000000
+                    temp_val_diff = val_diff/ONE_CRORE
                     if col_name in stock_list:                                             
                         turn_list.append(temp_val_diff)                       
-                    elif col_name not in nse.equity_market_categories and val_diff > 50000000:
+                    elif col_name not in nse.equity_market_categories and val_diff > MAX_TURNOVER_VALUE_DIFF:
                         stock_list.append(col_name)
                         turn_list.append(temp_val_diff)
 
                 elif sh_type == "Price":
                     if val_diff > 0:
-                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = (0, 255, 0)
+                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_GREEN
                     elif val_diff < 0:
-                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = (255, 0, 0)                  
+                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED               
         iter += 1
         col_number += 3
 
+    ############### Start - Logic to print max volume and max turnover ############### 
     if sh_type in ("Volume","Turnover") and row_number >= 2:
         mv.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
         mv.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True 
 
         if sh_type == "Volume":
             if stock_list:        
-                logger.debug(f'For Max Volume, Stock List is - {stock_list}')
+                logger.debug(f'For MaxVolume, Stock List is - {stock_list}')
+                logger.debug(f'For MaxVolume, Volume List is - {vol_list}')
                 temp_vol_df = pd.DataFrame(vol_list, index=stock_list, columns=['Vol%Diff'])        
                 mv.range(f'{get_col_name(col_number_1)}' + '2').value = temp_vol_df
             else:
@@ -240,11 +257,12 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
             mv.range(f'{get_col_name(col_number_1)}' + '2').value = "Name"
             mv.range(f'{get_col_name(col_number_1)}' + '2').font.bold = True
             mv.range(f'{get_col_name(col_number_1+1)}' + '2').font.bold = True            
-            logger.debug("Max Volume Printed")
+            logger.debug("MaxVolume Printed")
         elif sh_type == "Turnover":
             if turn_list:
                 stock_list.sort()        
-                logger.debug(f'For Max Turnover, Stock List is - {stock_list}')
+                logger.debug(f'For MaxTurnover, Stock List is - {stock_list}')
+                logger.debug(f'For MaxTurnover, Turnover List is - {turn_list}')
                 temp_turn_df = pd.DataFrame(turn_list, index=stock_list, columns=['Turnover(₹ Cr)'])  
                 mv.range(f'{get_col_name(col_number_1+2)}' + '2').value = temp_turn_df
             else:
@@ -253,7 +271,8 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
             mv.range(f'{get_col_name(col_number_1+2)}' + '2').font.bold = True
             mv.range(f'{get_col_name(col_number_1+3)}' + '2').font.bold = True
             mv.range(f'{get_col_name(col_number_1+3)}' + '2').autofit()
-            logger.debug("Max Turnover Printed")           
+            logger.debug("MaxTurnover Printed")
+    ############### End - Logic to print max volume and max turnover ##################           
 ############################# End - Function to create Spot sheets #############################
 
 while True:
@@ -321,9 +340,8 @@ while True:
                                     ]
             oc.range("E6").autofit()
             oc.range("G1").value = df
-        except:
-            pass
-
+        except Exception as e:
+            logger.critical(f'Error getting Options Data {e}')
     ####################### OptionChain Ends ###########################
 
     ####################### EquityData Starts ###########################
@@ -425,8 +443,8 @@ while True:
                 row_number += 1                    
             prev_time = curr_time
             ####################### End - Spot Data (Price,Volume,Turnover) ###########################               
-        except:
-            pass
+        except Exception as e:
+            logger.critical(f'Error getting Equity Data {e}')
     ####################### EquityData Ends ###########################
 
     ####################### FuturesData Starts ###########################
@@ -439,8 +457,8 @@ while True:
         try:
             fd_df = nse.futures_data(fd_sym, indices)
             fd.range("G1").value = fd_df
-        except:
-            pass
+        except Exception as e:
+            logger.critical(f'Error getting Futures Data {e}')
     ####################### FuturesData Ends ###########################
 
 
