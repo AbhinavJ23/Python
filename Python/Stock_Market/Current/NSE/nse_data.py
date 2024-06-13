@@ -29,7 +29,7 @@ if not os.path.exists("Nse_Data.xlsx"):
         wb.close()
         logger.debug("Created Excel - Nse_Data.xlsx")
     except Exception as e:
-        print(f'Error Creating Excel {e}')
+        logger.critical(f'Error Creating Excel - {e}')
         sys.exit()
 
 wb = xw.Book("Nse_Data.xlsx")
@@ -74,7 +74,7 @@ oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = 
 try:    
     df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
 except Exception as e:
-    logger.critical(f'Error getting FNO symbols for Options Data {e}')
+    logger.critical(f'Error getting FNO symbols for Options Data - {e}')
 df = df.set_index("FNO Symbol", drop=True)
 oc.range("A1").value = df
 oc.range("A1:A200").autofit()
@@ -100,7 +100,7 @@ fd.range("A:A").value = fd.range("G1:AD100").value = None
 try:
     fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
 except Exception as e:
-    logger.critical(f'Error getting FNO symbols for Futures Data {e}')
+    logger.critical(f'Error getting FNO symbols for Futures Data - {e}')
 fd_df = fd_df.set_index("FNO Symbol", drop=True)
 fd.range("A1").value = fd_df
 fd.range("A1:A200").autofit()
@@ -165,7 +165,8 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
     for col_name in spot_df1:
         spot_value = spot_df1[col_name].values
         if spot_value is None:
-            spot_value = np.zeros(1) 
+            logger.debug(f'For Time {time} - In {sh_type} sheet for {col_name}, value is None, hence setting it to zero')
+            spot_value = np.zeros(1)
         if row_number == 1:
             sh.range(f'{get_col_name(col_number)}' + str(row_number)).options(index=False).value = spot_df1[col_name]            
             sh.range(f'{get_col_name(col_number+1)}' + str(row_number)).value = "Difference"
@@ -182,6 +183,7 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
             if curr_spot[iter] is not None and prev_spot[iter] is not None:
                 val_diff = curr_spot[iter] - prev_spot[iter]                
             else:
+                logger.debug(f'For Time {time} - In {sh_type} sheet for {col_name},  current value is {curr_spot[iter]} and previous value is {prev_spot[iter]}, hence setting its difference to zero')
                 val_diff = np.zeros(1)
             if sh_type in ("Volume","Turnover") and val_diff < 0:
                 ## This indicates some data issue from NSE
@@ -341,7 +343,7 @@ while True:
             oc.range("E6").autofit()
             oc.range("G1").value = df
         except Exception as e:
-            logger.critical(f'Error getting Options Data {e}')
+            logger.critical(f'Error getting Options Data - {e}')
     ####################### OptionChain Ends ###########################
 
     ####################### EquityData Starts ###########################
@@ -411,9 +413,9 @@ while True:
                 eq.range("F8").value = "₹ Cr"
                 eq.range("F9").value = "₹ Cr"
                 eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
-                eq.range("D22").value = "TotalBuyQty"
+                eq.range("D22").value = "TotalBidQtyBuy"
                 eq.range("E22").value = tot_buy
-                eq.range("F22").value = "TotalSellQty"
+                eq.range("F22").value = "TotalBidQtySell"
                 eq.range("G22").value = tot_sell
 
             ####################### Start - Spot Data (Price,Volume,Turnover) ###########################
@@ -444,7 +446,7 @@ while True:
             prev_time = curr_time
             ####################### End - Spot Data (Price,Volume,Turnover) ###########################               
         except Exception as e:
-            logger.critical(f'Error getting Equity Data {e}')
+            logger.critical(f'Error getting Equity Data - {e}')
     ####################### EquityData Ends ###########################
 
     ####################### FuturesData Starts ###########################
@@ -458,7 +460,7 @@ while True:
             fd_df = nse.futures_data(fd_sym, indices)
             fd.range("G1").value = fd_df
         except Exception as e:
-            logger.critical(f'Error getting Futures Data {e}')
+            logger.critical(f'Error getting Futures Data - {e}')
     ####################### FuturesData Ends ###########################
 
 
