@@ -6,6 +6,7 @@ import dateutil.parser
 import numpy as np
 import time
 import logging
+from datetime import datetime, timedelta
 
 ####################### Initializing Logging Start #######################
 logging.basicConfig(filename='Nse_Data_'+time.strftime('%Y%m%d')+'.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -50,6 +51,7 @@ MAX_VOLUME_PERCENT_DIFF = 500
 MAX_TURNOVER_PERCENT_DIFF = 250
 MAX_TURNOVER_VALUE_DIFF = 50000000
 ONE_CRORE = 10000000
+CUMULATIVE_TURNOVER_DURATION = 5
 
 ####################### Initializing Excel Sheets #######################
 oc.range('1:1').font.bold = True
@@ -113,8 +115,11 @@ logger.debug("FuturesData sheet initialized")
 row_number = 1
 col_number = 2
 col_number_1 = 1
-prev_temp_dict = {}
+#prev_temp_dict = {}
+cum_turn_dict = {}
 prev_time = curr_time = ""
+prev_time_1 = datetime.now() #- timedelta(hours=0, minutes=1)
+#prev_time_flag = False
 prev_vol = curr_vol = []
 prev_vol_diff = curr_vol_diff = []
 prev_price = curr_price = []
@@ -139,7 +144,7 @@ def get_col_name(num):
 ############################# End - Function to get excel column(A1,B1 etc) given a positive integer #############################
 
 ############################# Start - Function to create Spot sheets #############################
-def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_diff,curr_spot_diff,col_number_1,stock_list):
+def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,prev_spot_diff,curr_spot_diff,col_number_1,stock_list):
     logger.debug(f'Printing Spot Sheet - {sh_type} for {time} and row {row_number}')
     if sh_type == "Price":
         spot_df = df[["lastPrice"]]
@@ -161,7 +166,8 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
     iter = 0
     per_diff = 0    
     vol_list = []
-    turn_list = []       
+    turn_list = []
+    global cum_turn_dict       
     for col_name in spot_df1:
         spot_value = spot_df1[col_name].values
         if spot_value is None:
@@ -231,9 +237,10 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
                     temp_val_diff = val_diff/ONE_CRORE
                     if col_name in stock_list:                                             
                         turn_list.append(temp_val_diff)                       
-                    elif col_name not in nse.equity_market_categories and val_diff > MAX_TURNOVER_VALUE_DIFF:
-                        stock_list.append(col_name)
-                        turn_list.append(temp_val_diff)
+                    elif col_name not in nse.equity_market_categories:
+                        if val_diff > MAX_TURNOVER_VALUE_DIFF or per_diff > MAX_TURNOVER_PERCENT_DIFF or per_diff < -MAX_TURNOVER_PERCENT_DIFF :
+                            stock_list.append(col_name)
+                            turn_list.append(temp_val_diff)
 
                 elif sh_type == "Price":
                     if val_diff > 0:
@@ -241,8 +248,7 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
                     elif val_diff < 0:
                         sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED               
         iter += 1
-        col_number += 3
-
+        col_number += 3    
     ############### Start - Logic to print max volume and max turnover ############### 
     if sh_type in ("Volume","Turnover") and row_number >= 2:
         mv.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
@@ -265,8 +271,19 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
                 stock_list.sort()        
                 logger.debug(f'For MaxTurnover, Stock List is - {stock_list}')
                 logger.debug(f'For MaxTurnover, Turnover List is - {turn_list}')
-                temp_turn_df = pd.DataFrame(turn_list, index=stock_list, columns=['Turnover(₹ Cr)'])  
+                temp_turn_df = pd.DataFrame(turn_list, index=stock_list, columns=['Turnover(₹ Cr)'])
                 mv.range(f'{get_col_name(col_number_1+2)}' + '2').value = temp_turn_df
+
+                if not cum_turn_dict:
+                    cum_turn_dict = {stock_list[i]: turn_list[i] for i in range(len(stock_list))}
+                else:
+                    temp_cum_turn_dict = {stock_list[i]: turn_list[i] for i in range(len(stock_list))}
+                    for key in temp_cum_turn_dict:
+                        if key in cum_turn_dict:
+                            cum_turn_dict[key] = cum_turn_dict[key] + temp_cum_turn_dict[key]
+                        else:
+                            cum_turn_dict.update({key:temp_cum_turn_dict[key]})
+                logger.debug(f'Cumulative turnover - {cum_turn_dict}')
             else:
                 mv.range(f'{get_col_name(col_number_1+3)}' + '2').value = "Turnover(₹ Cr)"
             mv.range(f'{get_col_name(col_number_1+2)}' + '2').value = "Name"
@@ -274,6 +291,20 @@ def create_spot_sheets(df,sh_type,time,row_number,prev_spot,curr_spot,prev_spot_
             mv.range(f'{get_col_name(col_number_1+3)}' + '2').font.bold = True
             mv.range(f'{get_col_name(col_number_1+3)}' + '2').autofit()
             logger.debug("MaxTurnover Printed")
+            
+            if duration.total_seconds()/60 >= CUMULATIVE_TURNOVER_DURATION:                
+                mv.range(f'{get_col_name(col_number_1+4)}' + '1').value = "Cumulative Turnover"
+                mv.range(f'{get_col_name(col_number_1+4)}' + '1').font.bold = True
+                mv.range(f'{get_col_name(col_number_1+4)}'+ '1').color = COLOR_YELLOW
+                mv.range(f'{get_col_name(col_number_1+5)}'+ '1').color = COLOR_YELLOW
+                #temp_cum_turn_df = pd.DataFrame(cum_turn_dict.items(), columns=['Name','Turnover'])
+                sorted_cum_turn_dict = dict(sorted(cum_turn_dict.items()))
+                temp_cum_turn_df = pd.DataFrame(sorted_cum_turn_dict.values(), index=sorted_cum_turn_dict.keys(), columns=['Turnover(₹ Cr)'])
+                mv.range(f'{get_col_name(col_number_1+4)}' + '2').value = temp_cum_turn_df
+                mv.range(f'{get_col_name(col_number_1+4)}' + '2').value = "Name"
+                mv.range(f'{get_col_name(col_number_1+4)}' + '2').font.bold = True
+                mv.range(f'{get_col_name(col_number_1+5)}' + '2').font.bold = True
+                logger.debug('Cumulative turonver printed')
     ############### End - Logic to print max volume and max turnover ##################           
 ############################# End - Function to create Spot sheets #############################
 
@@ -423,11 +454,18 @@ while True:
                 stock_list = []
                 vol_flag = False
                 turn_flag = False
-                create_spot_sheets(eq_df,"Price",curr_time,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff,col_number_1,stock_list)                               
-                create_spot_sheets(eq_df,"Volume",curr_time,row_number,prev_vol,curr_vol,prev_vol_diff,curr_vol_diff,col_number_1,stock_list)
-                create_spot_sheets(eq_df,"Turnover",curr_time,row_number,prev_turn,curr_turn,prev_turn_diff,curr_turn_diff,col_number_1,stock_list)
+                duration = curr_time - prev_time_1
+                create_spot_sheets(eq_df,"Price",curr_time,duration,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff,col_number_1,stock_list)                               
+                create_spot_sheets(eq_df,"Volume",curr_time,duration,row_number,prev_vol,curr_vol,prev_vol_diff,curr_vol_diff,col_number_1,stock_list)
+                create_spot_sheets(eq_df,"Turnover",curr_time,duration,row_number,prev_turn,curr_turn,prev_turn_diff,curr_turn_diff,col_number_1,stock_list)
                 if row_number >= 2:
                     col_number_1 += 4
+                
+                if duration.total_seconds()/60 >= CUMULATIVE_TURNOVER_DURATION:
+                    col_number_1 += 2
+                    prev_time_1 = curr_time
+                    cum_turn_dict = {}
+
                 if row_number > 1:
                     prev_price = curr_price
                     prev_vol = curr_vol
