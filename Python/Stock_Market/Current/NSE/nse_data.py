@@ -48,10 +48,12 @@ COLOR_GREEN = (0, 255, 0)
 COLOR_RED = (255, 0, 0)
 COLOR_YELLOW = (255, 255, 0)
 MAX_VOLUME_PERCENT_DIFF = 500
-MAX_TURNOVER_PERCENT_DIFF = 250
+MAX_TURNOVER_PERCENT_DIFF = 500
 MAX_TURNOVER_VALUE_DIFF = 50000000
 ONE_CRORE = 10000000
 CUMULATIVE_TURNOVER_DURATION = 5
+CUMULATIVE_TURNOVER = 100000000
+
 
 ####################### Initializing Excel Sheets #######################
 oc.range('1:1').font.bold = True
@@ -166,8 +168,7 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
     iter = 0
     per_diff = 0    
     vol_list = []
-    turn_list = []
-    global cum_turn_dict       
+    turn_list = []           
     for col_name in spot_df1:
         spot_value = spot_df1[col_name].values
         if spot_value is None:
@@ -238,7 +239,7 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
                     if col_name in stock_list:                                             
                         turn_list.append(temp_val_diff)                       
                     elif col_name not in nse.equity_market_categories:
-                        if val_diff > MAX_TURNOVER_VALUE_DIFF or per_diff > MAX_TURNOVER_PERCENT_DIFF or per_diff < -MAX_TURNOVER_PERCENT_DIFF :
+                        if val_diff > MAX_TURNOVER_VALUE_DIFF or per_diff > MAX_TURNOVER_PERCENT_DIFF or per_diff < -MAX_TURNOVER_PERCENT_DIFF:
                             stock_list.append(col_name)
                             turn_list.append(temp_val_diff)
 
@@ -248,8 +249,14 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
                     elif val_diff < 0:
                         sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED               
         iter += 1
-        col_number += 3    
-    ############### Start - Logic to print max volume and max turnover ############### 
+        col_number += 3
+    create_max_sheet(sh_type,time,duration,row_number,col_number_1,vol_list,turn_list,stock_list)
+############################# End - Function to create Spot sheets #############################
+
+############################# Start - Function to print max volume and max turnover ############ 
+def create_max_sheet(sh_type,time,duration,row_number,col_number_1,vol_list,turn_list,stock_list):
+    logger.debug(f'Printing MaxVolumeTurnover Sheet - {sh_type} for {time} and row {row_number}')   
+    global cum_turn_dict
     if sh_type in ("Volume","Turnover") and row_number >= 2:
         mv.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
         mv.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True 
@@ -297,16 +304,18 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
                 mv.range(f'{get_col_name(col_number_1+4)}' + '1').font.bold = True
                 mv.range(f'{get_col_name(col_number_1+4)}'+ '1').color = COLOR_YELLOW
                 mv.range(f'{get_col_name(col_number_1+5)}'+ '1').color = COLOR_YELLOW
-                #temp_cum_turn_df = pd.DataFrame(cum_turn_dict.items(), columns=['Name','Turnover'])
-                sorted_cum_turn_dict = dict(sorted(cum_turn_dict.items()))
+                logger.debug(f'Cumulative turnover Before - {cum_turn_dict}')
+                temp_cum_turn_dict_1 = {key: cum_turn_dict[key] for key in cum_turn_dict if cum_turn_dict[key] >= CUMULATIVE_TURNOVER/ONE_CRORE}
+                logger.debug(f'Cumulative turnover After - {temp_cum_turn_dict_1}')
+                sorted_cum_turn_dict = dict(sorted(temp_cum_turn_dict_1.items()))
                 temp_cum_turn_df = pd.DataFrame(sorted_cum_turn_dict.values(), index=sorted_cum_turn_dict.keys(), columns=['Turnover(₹ Cr)'])
                 mv.range(f'{get_col_name(col_number_1+4)}' + '2').value = temp_cum_turn_df
                 mv.range(f'{get_col_name(col_number_1+4)}' + '2').value = "Name"
                 mv.range(f'{get_col_name(col_number_1+4)}' + '2').font.bold = True
                 mv.range(f'{get_col_name(col_number_1+5)}' + '2').font.bold = True
+                mv.range(f'{get_col_name(col_number_1+5)}' + '2').autofit()
                 logger.debug('Cumulative turonver printed')
-    ############### End - Logic to print max volume and max turnover ##################           
-############################# End - Function to create Spot sheets #############################
+############################# End - Function to print max volume and max turnover ############            
 
 while True:
     time.sleep(1)
