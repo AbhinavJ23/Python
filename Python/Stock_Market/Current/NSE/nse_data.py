@@ -6,7 +6,7 @@ import dateutil.parser
 import numpy as np
 import time
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 ####################### Initializing Logging Start #######################
 logging.basicConfig(filename='Nse_Data_'+time.strftime('%Y%m%d')+'.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,6 +19,7 @@ nse = NSE()
 if not os.path.exists("Nse_Data.xlsx"):
     try:
         wb = xw.Book()
+        wb.sheets.add("PriceVolumeDirection")
         wb.sheets.add("MaxVolumeTurnover")
         wb.sheets.add("SpotTurnover")
         wb.sheets.add("SpotVolume")
@@ -41,6 +42,7 @@ sp = wb.sheets("SpotPrice")
 sv = wb.sheets("SpotVolume")
 st = wb.sheets("SpotTurnover")
 mv = wb.sheets("MaxVolumeTurnover")
+pv = wb.sheets("PriceVolumeDirection")
 
 ####################### Initializing Constants #######################
 COLOR_GREY = (211, 211, 211)
@@ -53,7 +55,6 @@ MAX_TURNOVER_VALUE_DIFF = 50000000
 ONE_CRORE = 10000000
 CUMULATIVE_TURNOVER_DURATION = 5
 CUMULATIVE_TURNOVER = 100000000
-
 
 ####################### Initializing Excel Sheets #######################
 oc.range('1:1').font.bold = True
@@ -115,19 +116,24 @@ logger.debug("FuturesData sheet initialized")
 
 ####################### Initializing Global Variables #######################
 row_number = 1
+row_number_1 = 2
 col_number = 2
 col_number_1 = 1
-#prev_temp_dict = {}
-cum_turn_dict = {}
+col_number_2 = 2
 prev_time = curr_time = ""
-prev_time_1 = datetime.now() #- timedelta(hours=0, minutes=1)
-#prev_time_flag = False
+prev_time_1 = datetime.now()
 prev_vol = curr_vol = []
 prev_vol_diff = curr_vol_diff = []
 prev_price = curr_price = []
 prev_price_diff = curr_price_diff = []
 prev_turn = curr_turn = []
 prev_turn_diff = curr_turn_diff = []
+cum_turn_dict = {}
+cum_price_diff_dict = {}
+prev_cum_price_diff_dict = {}
+cum_vol_diff_dict = {}
+prev_cum_vol_diff_dict = {}
+price_vol_dict_flag = False
 
 ############################# Start - Function to get excel column(A1,B1 etc) given a positive number #############################
 alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -168,7 +174,10 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
     iter = 0
     per_diff = 0    
     vol_list = []
-    turn_list = []           
+    turn_list = []
+    global cum_price_diff_dict
+    global cum_vol_diff_dict
+    global price_vol_dict_flag   
     for col_name in spot_df1:
         spot_value = spot_df1[col_name].values
         if spot_value is None:
@@ -186,25 +195,34 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
         else:                  
             sh.range(f'A{row_number + 1}').value = time.strftime('%H:%M:%S')
             sh.range(f'{get_col_name(col_number)}'+ str(row_number+1)).value = spot_value
-            curr_spot.append(spot_value)            
+            curr_spot.append(spot_value)           
             if curr_spot[iter] is not None and prev_spot[iter] is not None:
-                val_diff = curr_spot[iter] - prev_spot[iter]                
+                val_diff = curr_spot[iter] - prev_spot[iter]        
             else:
                 logger.debug(f'For Time {time} - In {sh_type} sheet for {col_name},  current value is {curr_spot[iter]} and previous value is {prev_spot[iter]}, hence setting its difference to zero')
                 val_diff = np.zeros(1)
             if sh_type in ("Volume","Turnover") and val_diff < 0:
                 ## This indicates some data issue from NSE
-                logger.warning("Potential Data Issue from NSE!!")
-                logger.debug(f'For Time {time} - In {sh_type} sheet for {col_name}, current value can not be less than previous value. Hence setting difference between current and previous value as zero')
+                logger.warning(f'Potential Data Issue from NSE!! value diff is {val_diff}')
+                logger.debug(f'For Time {time} - In {sh_type} sheet for {col_name}, current value {curr_spot[iter]} can not be less than previous value {prev_spot[iter]}. Hence setting difference between current and previous value as zero')
                 val_diff = np.zeros(1)
             sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).value = val_diff
+
+            ## First time add to Cumulative Price, Volume difference
+            if not price_vol_dict_flag:
+                if sh_type == "Price":
+                #if not cum_price_diff_dict:
+                    cum_price_diff_dict.update({col_name:val_diff})
+                elif sh_type == "Volume":
+                #if not cum_vol_diff_dict:
+                    cum_vol_diff_dict.update({col_name:val_diff})
             if row_number == 2:
                 prev_spot_diff.append(val_diff)
                 if sh_type == "Price":
                     if val_diff > 0:
                         sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_GREEN
                     elif val_diff < 0:
-                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED
+                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED                
             else:
                 curr_spot_diff.append(val_diff)
                 if sh_type in ("Volume","Turnover"):
@@ -228,13 +246,14 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
                     if per_diff > MAX_VOLUME_PERCENT_DIFF or per_diff < -MAX_VOLUME_PERCENT_DIFF:                        
                         stock_list.append(col_name)                     
                         vol_list.append(per_diff)
-
+                    ## Logic for updating cumulative volume difference
+                    if price_vol_dict_flag:
+                        cum_vol_diff_dict[col_name] = cum_vol_diff_dict[col_name] + val_diff
                 elif sh_type == "Turnover":
                     if per_diff > MAX_TURNOVER_PERCENT_DIFF:
                         sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_GREEN
                     elif per_diff < -MAX_TURNOVER_PERCENT_DIFF:
-                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_RED
-                    
+                        sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_RED                                        
                     temp_val_diff = val_diff/ONE_CRORE
                     if col_name in stock_list:                                             
                         turn_list.append(temp_val_diff)                       
@@ -242,22 +261,26 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
                         if val_diff > MAX_TURNOVER_VALUE_DIFF or per_diff > MAX_TURNOVER_PERCENT_DIFF or per_diff < -MAX_TURNOVER_PERCENT_DIFF:
                             stock_list.append(col_name)
                             turn_list.append(temp_val_diff)
-
                 elif sh_type == "Price":
                     if val_diff > 0:
                         sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_GREEN
                     elif val_diff < 0:
-                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED               
+                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED
+                    ## Logic for updating cumulative price difference
+                    if price_vol_dict_flag:
+                        cum_price_diff_dict[col_name] = cum_price_diff_dict[col_name] + val_diff             
         iter += 1
         col_number += 3
-    create_max_sheet(sh_type,time,duration,row_number,col_number_1,vol_list,turn_list,stock_list)
+
+    if sh_type in ("Volume","Turnover"):
+        create_max_sheet(sh_type,time,duration,row_number,col_number_1,vol_list,turn_list,stock_list)
 ############################# End - Function to create Spot sheets #############################
 
 ############################# Start - Function to print max volume and max turnover ############ 
 def create_max_sheet(sh_type,time,duration,row_number,col_number_1,vol_list,turn_list,stock_list):
     logger.debug(f'Printing MaxVolumeTurnover Sheet - {sh_type} for {time} and row {row_number}')   
     global cum_turn_dict
-    if sh_type in ("Volume","Turnover") and row_number >= 2:
+    if row_number >= 2:
         mv.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
         mv.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True 
 
@@ -315,7 +338,76 @@ def create_max_sheet(sh_type,time,duration,row_number,col_number_1,vol_list,turn
                 mv.range(f'{get_col_name(col_number_1+5)}' + '2').font.bold = True
                 mv.range(f'{get_col_name(col_number_1+5)}' + '2').autofit()
                 logger.debug('Cumulative turonver printed')
-############################# End - Function to print max volume and max turnover ############            
+############################# End - Function to print max volume and max turnover ############
+
+############################# Start - Function to compare Cumulative Price, Volume difference after every set duration ############
+############################# Also print the direction (Up,Down) and probable signal                                   ############
+def create_price_vol_sheet(time, row_number_1, col_number_2):
+    logger.debug(f'Printing PriceVolumeDirection Sheet for {time} and row {row_number_1}')
+    logger.debug(f'prev_cum_price_diff_dict - {prev_cum_price_diff_dict} and prev_cum_vol_diff_dict - {prev_cum_vol_diff_dict}')
+    logger.debug(f'cum_price_diff_dict - {cum_price_diff_dict} and cum_vol_diff_dict - {cum_vol_diff_dict}')
+    col_number_2 = 2
+    for key in cum_price_diff_dict:
+        if row_number_1 == 2:       
+            ## Initializing the stock names and columns
+            pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1-1)).value = key
+            pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1-1)).autofit()
+            pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Price"
+            pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).font.bold = True
+            pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Volume"
+            pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).font.bold = True
+            pv.range('1:1').font.bold = True
+            pv.range(f'A{row_number_1}').value = time
+            pv.range(f'A{row_number_1}').font.bold = True
+        else:
+            ## Check difference between previous cumulative(price,volume) and current cumulative(price,volume)
+            pv.range(f'A{row_number_1}').value = time.strftime('%H:%M:%S')
+            pv.range(f'A{row_number_1}').font.bold = True
+            if (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) == 0:
+                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Neutral"
+                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_YELLOW
+                if (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) == 0:
+                    pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Neutral"
+                    pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_YELLOW
+                elif (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) > 0:
+                    pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Up"
+                    pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_GREEN
+                else:
+                    pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Down"
+                    pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_RED      
+            elif (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) == 0:
+                if (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) > 0:
+                    pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Up"
+                    pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_GREEN
+                else:
+                    pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Down"
+                    pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_RED                  
+                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Neutral"
+                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_YELLOW
+            elif (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) < 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) < 0:
+                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Down"
+                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_RED
+                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Down"
+                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_RED
+            elif (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) < 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) > 0:
+                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Down"
+                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_RED
+                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Up"
+                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_GREEN
+            elif (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) > 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) > 0:
+                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Up"
+                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_GREEN
+                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Up"
+                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_GREEN
+            elif (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) > 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) < 0:
+                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Up"
+                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_GREEN
+                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Down"
+                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_RED
+            else:
+                logger.debug("Scenario not handled")
+        col_number_2 += 2
+############################# End - Function to compare Cumulative Price, Volume difference after every set duration ############ 
 
 while True:
     time.sleep(1)
@@ -394,8 +486,12 @@ while True:
         sp.clear()
         st.clear()
         mv.clear()
+        pv.clear()
         row_number = 1
         col_number = 2
+        row_number_1 = 2
+        col_number_1 = 1
+        col_number_2 = 2
     if pre_eq_sym != eq_sym:
         eq.range("D6:H30").value = None
     pre_ind_sym = ind_sym
@@ -461,19 +557,25 @@ while True:
             ####################### Start - Spot Data (Price,Volume,Turnover) ###########################
             if prev_time != curr_time:
                 stock_list = []
-                vol_flag = False
-                turn_flag = False
                 duration = curr_time - prev_time_1
                 create_spot_sheets(eq_df,"Price",curr_time,duration,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff,col_number_1,stock_list)                               
                 create_spot_sheets(eq_df,"Volume",curr_time,duration,row_number,prev_vol,curr_vol,prev_vol_diff,curr_vol_diff,col_number_1,stock_list)
-                create_spot_sheets(eq_df,"Turnover",curr_time,duration,row_number,prev_turn,curr_turn,prev_turn_diff,curr_turn_diff,col_number_1,stock_list)
+                create_spot_sheets(eq_df,"Turnover",curr_time,duration,row_number,prev_turn,curr_turn,prev_turn_diff,curr_turn_diff,col_number_1,stock_list)                
                 if row_number >= 2:
                     col_number_1 += 4
+                    price_vol_dict_flag = True
                 
                 if duration.total_seconds()/60 >= CUMULATIVE_TURNOVER_DURATION:
                     col_number_1 += 2
                     prev_time_1 = curr_time
                     cum_turn_dict = {}
+                    create_price_vol_sheet(curr_time, row_number_1, col_number_2)
+                    prev_cum_price_diff_dict = cum_price_diff_dict
+                    cum_price_diff_dict = {}
+                    prev_cum_vol_diff_dict = cum_vol_diff_dict
+                    cum_vol_diff_dict = {}
+                    row_number_1 += 1
+                    price_vol_dict_flag = False
 
                 if row_number > 1:
                     prev_price = curr_price
@@ -482,6 +584,7 @@ while True:
                 curr_price = []
                 curr_vol = []
                 curr_turn = []
+
                 if row_number > 2:
                     prev_price_diff = curr_price_diff
                     prev_vol_diff = curr_vol_diff
