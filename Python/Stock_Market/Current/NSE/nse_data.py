@@ -65,11 +65,11 @@ oc.range('C1').column_width = 2
 oc.range('G1').column_width = 2
 eq.range('1:1').font.bold = True
 eq.range('1:1').color = COLOR_GREY
-eq.range('B1:C500').color = COLOR_GREY
+eq.range('B1:C510').color = COLOR_GREY
 eq.range('B1').column_width = 1
 eq.range('C1').column_width = 1
 eq.range('H1').column_width = 2
-eq.range('H1:H500').color = COLOR_GREY
+eq.range('H1:H510').color = COLOR_GREY
 fd.range('1:1').font.bold = True
 fd.range('1:1').color = COLOR_GREY
 logger.debug("Excel sheets initialized")
@@ -90,7 +90,7 @@ exp_list = []
 logger.debug("OptionChain sheet initialized")
 
 ######################### Initializing EquityData sheet #######################
-eq.range("A:A").value = eq.range("D5:E30").value = eq.range("I1:AD100").value = None
+eq.range("A:A").value = eq.range("D5:H30").value = eq.range("I1:AD510").value = None
 eq_df = pd.DataFrame({"Index Symbol":nse.equity_market_categories})
 eq_df = eq_df.set_index("Index Symbol", drop=True)
 eq.range("A1").value = eq_df
@@ -481,7 +481,8 @@ while True:
     ####################### EquityData Starts ###########################
     ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
     if pre_ind_sym != ind_sym: #or pre_eq_sym != eq_sym:
-        eq.range("I1:AD100").value = eq.range("D6:H30").value = eq.range("E3").value = None
+        eq_sym = ""
+        eq.range("I1:AD510").value = eq.range("D5:H30").value = eq.range("E3").value = None
         sv.clear()
         sp.clear()
         st.clear()
@@ -492,8 +493,23 @@ while True:
         row_number_1 = 2
         col_number_1 = 1
         col_number_2 = 2
+        prev_time = curr_time = ""
+        prev_time_1 = datetime.now()
+        prev_vol = curr_vol = []
+        prev_vol_diff = curr_vol_diff = []
+        prev_price = curr_price = []
+        prev_price_diff = curr_price_diff = []
+        prev_turn = curr_turn = []
+        prev_turn_diff = curr_turn_diff = []
+        cum_turn_dict = {}
+        cum_price_diff_dict = {}
+        prev_cum_price_diff_dict = {}
+        cum_vol_diff_dict = {}
+        prev_cum_vol_diff_dict = {}
+        price_vol_dict_flag = False
+
     if pre_eq_sym != eq_sym:
-        eq.range("D6:H30").value = None
+        eq.range("D5:H30").value = None
     pre_ind_sym = ind_sym
     pre_eq_sym = eq_sym 
     if ind_sym is not None:
