@@ -83,7 +83,9 @@ except Exception as e:
 df = df.set_index("FNO Symbol", drop=True)
 oc.range("A1").value = df
 oc.range("A1:A200").autofit()
-oc.range("D2").value, oc.range("D3").value = "Enter Symbol", "Enter Expiry"
+oc.range("D2").value, oc.range("D3").value = "Enter Symbol ->", "Enter Expiry ->"
+oc.range('D2').font.bold = True
+oc.range('D3').font.bold = True
 oc.range("D2:E3").autofit()
 pre_oc_sym = pre_oc_exp = ""
 exp_list = []
@@ -95,7 +97,9 @@ eq_df = pd.DataFrame({"Index Symbol":nse.equity_market_categories})
 eq_df = eq_df.set_index("Index Symbol", drop=True)
 eq.range("A1").value = eq_df
 eq.range("A1:A50").autofit()
-eq.range("D2").value, eq.range("D3").value = "Enter Index ", "Enter Equity"
+eq.range("D2").value, eq.range("D3").value = "Enter Index ->", "Enter Equity ->"
+eq.range('D2').font.bold = True
+eq.range('D3').font.bold = True
 eq.range("D2:E3").autofit()
 pre_ind_sym = pre_eq_sym = ""
 logger.debug("EquityData sheet initialized")
@@ -109,7 +113,8 @@ except Exception as e:
 fd_df = fd_df.set_index("FNO Symbol", drop=True)
 fd.range("A1").value = fd_df
 fd.range("A1:A200").autofit()
-fd.range("D2").value = "Enter Index/Equity"
+fd.range("D2").value = "Enter Index/Equity ->"
+fd.range('D2').font.bold = True
 fd.range("D2").autofit()
 pre_fd_sym = ""
 logger.debug("FuturesData sheet initialized")
@@ -480,9 +485,11 @@ while True:
 
     ####################### EquityData Starts ###########################
     ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
-    if pre_ind_sym != ind_sym: #or pre_eq_sym != eq_sym:
+    if pre_ind_sym != ind_sym:
         eq_sym = ""
-        eq.range("I1:AD510").value = eq.range("D5:H30").value = eq.range("E3").value = None
+        eq.range("I1:AD510").value = eq.range("D5:H30").value = None
+        eq.range("E1").value = eq.range("G1").value = None
+        eq.range("E3").value = eq.range("F2").value = eq.range("G2").value = None
         sv.clear()
         sp.clear()
         st.clear()
@@ -510,6 +517,8 @@ while True:
 
     if pre_eq_sym != eq_sym:
         eq.range("D5:H30").value = None
+        eq.range("F3").value = None
+        eq.range("G3").value = None
     pre_ind_sym = ind_sym
     pre_eq_sym = eq_sym 
     if ind_sym is not None:
@@ -523,17 +532,23 @@ while True:
             eq.range("I1").value = eq_df
             eq.range("D1").value = "Index Timestamp"
             eq.range("D1").autofit()
-            eq.range("E1").value = eq.range("V36").value
+            eq.range("E1").value = eq_df.loc[ind_sym,'lastUpdateTime']
             eq.range("E1").autofit()
             eq.range("F1").value = "Equity Timestamp"
             eq.range("F1").autofit()
-            eq.range("G1").value = eq.range("V3").value
+            eq.range("F2").value = "Index Value"
+            eq.range('F2').font.bold = True
+            eq.range("G2").value = eq_df.loc[ind_sym,'lastPrice']
+            eq.range("G1").value = eq.range("V2").value
             curr_time = eq.range("G1").value
             eq.range("G1").autofit()
             if eq_sym is not None:
                 data = nse.equity_info(eq_sym, trade_info=True)
                 bid_list = ask_list = trd_data = []
                 tot_buy = tot_sell = 0
+                eq.range("F3").value = "Equity Value"
+                eq.range('F3').font.bold = True
+                eq.range("G3").value = eq_df.loc[eq_sym,'lastPrice']
 
                 for key,value in data.items():
                     if str(key) == "marketDeptOrderBook":
