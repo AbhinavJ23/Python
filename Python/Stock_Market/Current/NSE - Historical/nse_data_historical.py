@@ -24,7 +24,7 @@ if not os.path.exists(file_name):
         wb.sheets.add("OptionChain")
         wb.sheets.add("EquityData")
         wb.save(file_name)
-        wb.close()
+        #wb.close()
         logger.debug("Created Excel - " + file_name)
     except Exception as e:
         logger.critical(f'Error Creating Excel - {e}')
@@ -72,7 +72,7 @@ oc.range("D2").value, oc.range("D3").value = "Enter Symbol ->", "Enter Expiry ->
 oc.range('D2').font.bold = True
 oc.range('D3').font.bold = True
 oc.range("D2:E3").autofit()
-pre_oc_sym = pre_oc_exp = ""
+pre_oc_sym = pre_oc_exp = None
 exp_list = []
 logger.debug("OptionChain sheet initialized")
 
@@ -87,7 +87,7 @@ eq.range('D2').font.bold = True
 eq.range('D3').font.bold = True
 eq.range("D2:E3").autofit()
 eq.range('A35:G35').color = COLOR_GREY
-pre_ind_sym = pre_eq_sym = ""
+pre_ind_sym = pre_eq_sym = None
 logger.debug("EquityData sheet initialized")
 
 ####################### Initializing FuturesData sheet #######################
@@ -102,12 +102,12 @@ fd.range("A1:A200").autofit()
 fd.range("D2").value = "Enter Index/Equity ->"
 fd.range('D2').font.bold = True
 fd.range("D2").autofit()
-pre_fd_sym = ""
+pre_fd_sym = None
 logger.debug("FuturesData sheet initialized")
 
 ####################### Initializing Global Variables #######################
 row_number = 1
-prev_time = curr_time = ""
+prev_time = curr_time = None
 equity_df_flag = True
 prev_time_1 = datetime.now()
 
@@ -200,12 +200,12 @@ while True:
     ####################### EquityData Starts ###########################
     ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
     if pre_ind_sym != ind_sym:
-        eq_sym = ""
+        eq_sym = None
         eq.range("I1:AD510").value = eq.range("D5:H30").value = None
         eq.range("E1").value = eq.range("G1").value = None
         eq.range("E3").value = eq.range("F2").value = eq.range("G2").value = None
         row_number = 1
-        prev_time = curr_time = ""
+        prev_time = curr_time = None
         prev_time_1 = datetime.now()
 
     if pre_eq_sym != eq_sym:
@@ -213,11 +213,17 @@ while True:
         eq.range("F3").value = None
         eq.range("G3").value = None
     pre_ind_sym = ind_sym
-    pre_eq_sym = eq_sym 
+    pre_eq_sym = eq_sym
+    eq_df = None 
     if ind_sym is not None:
-        try:
-            logger.debug(f'value of row number is {row_number}')
+        logger.debug(f'value of row number is {row_number}')
+        try:            
             eq_df = nse.equity_market_data(ind_sym)
+        except Exception as e:
+            logger.warning(f'Error getting Equity Data - {e}')
+            time.sleep(5)
+            continue
+        if eq_df is not None:            
             eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series","identifier"],
                        axis=1,inplace=True)
             eq_df.index.name = 'symbol'            
@@ -243,7 +249,7 @@ while True:
                 eq.range(f'I{row_number}').value = eq_df
                 equity_df_flag = False
 
-            if prev_time != "" and prev_time != curr_time:
+            if prev_time != None and prev_time != curr_time:
                 row_number += rows_eq_df
                 eq.range(f'I{row_number}' + ':' + f'Z{row_number}').color = COLOR_GREY               
                 eq.range(f'I{row_number}').value = eq_df                            
@@ -254,51 +260,58 @@ while True:
             prev_time = curr_time
 
             if eq_sym is not None:
-                data = nse.equity_info(eq_sym, trade_info=True)
-                bid_list = ask_list = trd_data = []
-                tot_buy = tot_sell = 0
-                eq.range("F3").value = "Current Equity Value"
-                eq.range('F3').font.bold = True
-                eq.range("G3").value = eq_df.loc[eq_sym,'lastPrice']
+                data = None
+                try:
+                    data = nse.equity_info(eq_sym, trade_info=True)
+                except Exception as e:
+                    logger.warning(f'Error getting Equity Info for {eq_sym} - {e}')
+                    time.sleep(5)
+                    continue
+                if data is not None:
+                    bid_list = ask_list = trd_data = []
+                    tot_buy = tot_sell = 0
+                    eq.range("F3").value = "Current Equity Value"
+                    eq.range('F3').font.bold = True
+                    eq.range("G3").value = eq_df.loc[eq_sym,'lastPrice']
 
-                for key,value in data.items():
-                    if str(key) == "marketDeptOrderBook":
-                        for k,v in value.items():
-                            if str(k) == "bid":
-                                bid_list = v
-                            elif str(k) == "ask":
-                                ask_list = v
-                            elif str(k) == "tradeInfo":
-                                trd_data.append(v)
-                            elif str(k) == "totalBuyQuantity":
-                                tot_buy = v
-                            elif str(k) == "totalSellQuantity":
-                                tot_sell = v
-                        break
+                    for key,value in data.items():
+                        if str(key) == "marketDeptOrderBook":
+                            for k,v in value.items():
+                                if str(k) == "bid":
+                                    bid_list = v
+                                elif str(k) == "ask":
+                                    ask_list = v
+                                elif str(k) == "tradeInfo":
+                                    trd_data.append(v)
+                                elif str(k) == "totalBuyQuantity":
+                                    tot_buy = v
+                                elif str(k) == "totalSellQuantity":
+                                    tot_sell = v
+                            break
 
-                bid_df = pd.DataFrame(bid_list)
-                bid_df.rename(columns={"price":"Bid Price","quantity":"Bid Quantity"},inplace=True)
-                ask_df = pd.DataFrame(ask_list)
-                ask_df.rename(columns={"price":"Ask Price","quantity":"Ask Quantity"},inplace=True)              
+                    bid_df = pd.DataFrame(bid_list)
+                    bid_df.rename(columns={"price":"Bid Price","quantity":"Bid Quantity"},inplace=True)
+                    ask_df = pd.DataFrame(ask_list)
+                    ask_df.rename(columns={"price":"Ask Price","quantity":"Ask Quantity"},inplace=True)              
  
-                bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
+                    bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
 
-                trd_df = pd.DataFrame(trd_data).transpose()
-                eq.range("D5").value = trd_df
-                eq.range("E5").value = None
-                eq.range("F6").value = "Lakhs"
-                eq.range("F7").value = "₹ Cr"
-                eq.range("F8").value = "₹ Cr"
-                eq.range("F9").value = "₹ Cr"
-                eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
-                eq.range("D22").value = "TotalBidQtyBuy"
-                eq.range("E22").value = tot_buy
-                eq.range("F22").value = "TotalBidQtySell"
-                eq.range("G22").value = tot_sell
-            
-        except Exception as e:
-            logger.warning(f'Error getting Equity Data for time {curr_time} - {e}')
-            pass
+                    trd_df = pd.DataFrame(trd_data).transpose()
+                    eq.range("D5").value = trd_df
+                    eq.range("E5").value = None
+                    eq.range("F6").value = "Lakhs"
+                    eq.range("F7").value = "₹ Cr"
+                    eq.range("F8").value = "₹ Cr"
+                    eq.range("F9").value = "₹ Cr"
+                    eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
+                    eq.range("D22").value = "TotalBidQtyBuy"
+                    eq.range("E22").value = tot_buy
+                    eq.range("F22").value = "TotalBidQtySell"
+                    eq.range("G22").value = tot_sell
+                else:
+                    logger.warning(f'Error getting Equity Info for {eq_sym} - Equity Info Data is Null')          
+        else:
+            logger.warning(f'Error getting Equity Data - Equity DataFrame is Null')
     ####################### EquityData Ends ###########################
 
     ####################### FuturesData Starts ###########################

@@ -9,14 +9,15 @@ import logging
 from datetime import datetime
 
 ####################### Initializing Logging Start #######################
-logging.basicConfig(filename='Nse_Data_'+time.strftime('%Y%m%d')+'.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='Nse_Data_'+time.strftime('%Y%m%d%H%M%S')+'.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger()
 ####################### Initializing Logging End #######################
 
 nse = NSE()
 
 ## Creating new excel and adding sheets
-if not os.path.exists("Nse_Data.xlsx"):
+file_name = 'Nse_Data_'+time.strftime('%Y%m%d%H%M%S')+'.xlsx'
+if not os.path.exists(file_name):
     try:
         wb = xw.Book()
         wb.sheets.add("PriceVolumeDirection")
@@ -27,14 +28,14 @@ if not os.path.exists("Nse_Data.xlsx"):
         wb.sheets.add("FuturesData")
         wb.sheets.add("EquityData")
         wb.sheets.add("OptionChain")
-        wb.save("Nse_Data.xlsx")
-        wb.close()
-        logger.debug("Created Excel - Nse_Data.xlsx")
+        wb.save(file_name)
+        #wb.close()
+        logger.debug("Created Excel - " + file_name)
     except Exception as e:
         logger.critical(f'Error Creating Excel - {e}')
         sys.exit()
 
-wb = xw.Book("Nse_Data.xlsx")
+wb = xw.Book(file_name)
 oc = wb.sheets("OptionChain")
 eq = wb.sheets("EquityData")
 fd = wb.sheets("FuturesData")
@@ -55,6 +56,7 @@ MAX_TURNOVER_VALUE_DIFF = 50000000
 ONE_CRORE = 10000000
 CUMULATIVE_TURNOVER_DURATION = 5
 CUMULATIVE_TURNOVER = 100000000
+#MAX_PRICE_ERROR_THRESHOLD = 20
 
 ####################### Initializing Excel Sheets #######################
 oc.range('1:1').font.bold = True
@@ -65,7 +67,7 @@ oc.range('C1').column_width = 2
 oc.range('G1').column_width = 2
 eq.range('1:1').font.bold = True
 eq.range('1:1').color = COLOR_GREY
-eq.range('B1:C510').color = COLOR_GREY
+eq.range('B1:C34').color = COLOR_GREY
 eq.range('B1').column_width = 1
 eq.range('C1').column_width = 1
 eq.range('H1').column_width = 2
@@ -87,7 +89,7 @@ oc.range("D2").value, oc.range("D3").value = "Enter Symbol ->", "Enter Expiry ->
 oc.range('D2').font.bold = True
 oc.range('D3').font.bold = True
 oc.range("D2:E3").autofit()
-pre_oc_sym = pre_oc_exp = ""
+pre_oc_sym = pre_oc_exp = None
 exp_list = []
 logger.debug("OptionChain sheet initialized")
 
@@ -101,7 +103,8 @@ eq.range("D2").value, eq.range("D3").value = "Enter Index ->", "Enter Equity ->"
 eq.range('D2').font.bold = True
 eq.range('D3').font.bold = True
 eq.range("D2:E3").autofit()
-pre_ind_sym = pre_eq_sym = ""
+eq.range('A35:G35').color = COLOR_GREY
+pre_ind_sym = pre_eq_sym = None
 logger.debug("EquityData sheet initialized")
 
 ####################### Initializing FuturesData sheet #######################
@@ -116,7 +119,7 @@ fd.range("A1:A200").autofit()
 fd.range("D2").value = "Enter Index/Equity ->"
 fd.range('D2').font.bold = True
 fd.range("D2").autofit()
-pre_fd_sym = ""
+pre_fd_sym = None
 logger.debug("FuturesData sheet initialized")
 
 ####################### Initializing Global Variables #######################
@@ -125,7 +128,7 @@ row_number_1 = 2
 col_number = 2
 col_number_1 = 1
 col_number_2 = 2
-prev_time = curr_time = ""
+prev_time = curr_time = None
 prev_time_1 = datetime.now()
 prev_vol = curr_vol = []
 prev_vol_diff = curr_vol_diff = []
@@ -139,6 +142,7 @@ prev_cum_price_diff_dict = {}
 cum_vol_diff_dict = {}
 prev_cum_vol_diff_dict = {}
 price_vol_dict_flag = False
+initial_len_eq_df = 0
 
 ############################# Start - Function to get excel column(A1,B1 etc) given a positive number #############################
 alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -208,7 +212,7 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
                 val_diff = np.zeros(1)
             if sh_type in ("Volume","Turnover") and val_diff < 0:
                 ## This indicates some data issue from NSE
-                logger.warning(f'Potential Data Issue from NSE!! value diff is {val_diff}')
+                logger.warning(f'Potential Data Issue from NSE in {sh_type} sheet!! value diff is {val_diff}')
                 logger.debug(f'For Time {time} - In {sh_type} sheet for {col_name}, current value {curr_spot[iter]} can not be less than previous value {prev_spot[iter]}. Hence setting difference between current and previous value as zero')
                 val_diff = np.zeros(1)
             sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).value = val_diff
@@ -216,10 +220,8 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
             ## First time add to Cumulative Price, Volume difference
             if not price_vol_dict_flag:
                 if sh_type == "Price":
-                #if not cum_price_diff_dict:
                     cum_price_diff_dict.update({col_name:val_diff})
                 elif sh_type == "Volume":
-                #if not cum_vol_diff_dict:
                     cum_vol_diff_dict.update({col_name:val_diff})
             if row_number == 2:
                 prev_spot_diff.append(val_diff)
@@ -480,13 +482,14 @@ while True:
             oc.range("E6").autofit()
             oc.range("G1").value = df
         except Exception as e:
-            logger.critical(f'Error getting Options Data - {e}')
+            logger.warning(f'Error getting Options Data - {e}')
+            pass
     ####################### OptionChain Ends ###########################
 
     ####################### EquityData Starts ###########################
     ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
     if pre_ind_sym != ind_sym:
-        eq_sym = ""
+        eq_sym = None
         eq.range("I1:AD510").value = eq.range("D5:H30").value = None
         eq.range("E1").value = eq.range("G1").value = None
         eq.range("E3").value = eq.range("F2").value = eq.range("G2").value = None
@@ -500,7 +503,7 @@ while True:
         row_number_1 = 2
         col_number_1 = 1
         col_number_2 = 2
-        prev_time = curr_time = ""
+        prev_time = curr_time = None
         prev_time_1 = datetime.now()
         prev_vol = curr_vol = []
         prev_vol_diff = curr_vol_diff = []
@@ -520,15 +523,22 @@ while True:
         eq.range("F3").value = None
         eq.range("G3").value = None
     pre_ind_sym = ind_sym
-    pre_eq_sym = eq_sym 
+    pre_eq_sym = eq_sym
+    eq_df = None
     if ind_sym is not None:
         try:
             eq_df = nse.equity_market_data(ind_sym)
+        except Exception as e:
+            logger.warning(f'Error getting Equity Data - {e}')
+            time.sleep(5)
+            continue
+        if eq_df is not None:
             eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series","identifier"],
                        axis=1,inplace=True)
             eq_df.index.name = 'symbol'            
             sorted_idx = eq_df.index.sort_values()
             eq_df = eq_df.loc[sorted_idx]
+            rows_eq_df = len(eq_df.index)
             eq.range("I1").value = eq_df
             eq.range("D1").value = "Index Timestamp"
             eq.range("D1").autofit()
@@ -539,54 +549,68 @@ while True:
             eq.range("F2").value = "Index Value"
             eq.range('F2').font.bold = True
             eq.range("G2").value = eq_df.loc[ind_sym,'lastPrice']
-            eq.range("G1").value = eq.range("V2").value
+            #eq.range("G1").value = eq.range("V2").value
+            eq.range("G1").value = eq_df.iloc[0]['lastUpdateTime']
             curr_time = eq.range("G1").value
             eq.range("G1").autofit()
             if eq_sym is not None:
-                data = nse.equity_info(eq_sym, trade_info=True)
-                bid_list = ask_list = trd_data = []
-                tot_buy = tot_sell = 0
-                eq.range("F3").value = "Equity Value"
-                eq.range('F3').font.bold = True
-                eq.range("G3").value = eq_df.loc[eq_sym,'lastPrice']
+                data = None
+                try:
+                    data = nse.equity_info(eq_sym, trade_info=True)
+                except Exception as e:
+                    logger.warning(f'Error getting Equity Info for {eq_sym} - {e}')
+                    time.sleep(5)
+                    continue
+                if data is not None:
+                    bid_list = ask_list = trd_data = []
+                    tot_buy = tot_sell = 0
+                    eq.range("F3").value = "Equity Value"
+                    eq.range('F3').font.bold = True
+                    eq.range("G3").value = eq_df.loc[eq_sym,'lastPrice']
 
-                for key,value in data.items():
-                    if str(key) == "marketDeptOrderBook":
-                        for k,v in value.items():
-                            if str(k) == "bid":
-                                bid_list = v
-                            elif str(k) == "ask":
-                                ask_list = v
-                            elif str(k) == "tradeInfo":
-                                trd_data.append(v)
-                            elif str(k) == "totalBuyQuantity":
-                                tot_buy = v
-                            elif str(k) == "totalSellQuantity":
-                                tot_sell = v
-                        break
+                    for key,value in data.items():
+                        if str(key) == "marketDeptOrderBook":
+                            for k,v in value.items():
+                                if str(k) == "bid":
+                                    bid_list = v
+                                elif str(k) == "ask":
+                                    ask_list = v
+                                elif str(k) == "tradeInfo":
+                                    trd_data.append(v)
+                                elif str(k) == "totalBuyQuantity":
+                                    tot_buy = v
+                                elif str(k) == "totalSellQuantity":
+                                    tot_sell = v
+                            break
 
-                bid_df = pd.DataFrame(bid_list)
-                bid_df.rename(columns={"price":"Bid Price","quantity":"Bid Quantity"},inplace=True)
-                ask_df = pd.DataFrame(ask_list)
-                ask_df.rename(columns={"price":"Ask Price","quantity":"Ask Quantity"},inplace=True)              
+                    bid_df = pd.DataFrame(bid_list)
+                    bid_df.rename(columns={"price":"Bid Price","quantity":"Bid Quantity"},inplace=True)
+                    ask_df = pd.DataFrame(ask_list)
+                    ask_df.rename(columns={"price":"Ask Price","quantity":"Ask Quantity"},inplace=True)              
  
-                bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
+                    bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
 
-                trd_df = pd.DataFrame(trd_data).transpose()
-                eq.range("D5").value = trd_df
-                eq.range("E5").value = None
-                eq.range("F6").value = "Lakhs"
-                eq.range("F7").value = "₹ Cr"
-                eq.range("F8").value = "₹ Cr"
-                eq.range("F9").value = "₹ Cr"
-                eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
-                eq.range("D22").value = "TotalBidQtyBuy"
-                eq.range("E22").value = tot_buy
-                eq.range("F22").value = "TotalBidQtySell"
-                eq.range("G22").value = tot_sell
+                    trd_df = pd.DataFrame(trd_data).transpose()
+                    eq.range("D5").value = trd_df
+                    eq.range("E5").value = None
+                    eq.range("F6").value = "Lakhs"
+                    eq.range("F7").value = "₹ Cr"
+                    eq.range("F8").value = "₹ Cr"
+                    eq.range("F9").value = "₹ Cr"
+                    eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
+                    eq.range("D22").value = "TotalBidQtyBuy"
+                    eq.range("E22").value = tot_buy
+                    eq.range("F22").value = "TotalBidQtySell"
+                    eq.range("G22").value = tot_sell
+                else:
+                    logger.warning(f'Error getting Equity Info for {eq_sym} - Equity Info Data is Null')
+
+            if row_number == 1:
+                initial_rows_eq_df = len(eq_df.index)
+            logger.debug(f'For Time {curr_time} and row number {row_number}, initial stocks - {initial_rows_eq_df} and current stocks - {rows_eq_df}')
 
             ####################### Start - Spot Data (Price,Volume,Turnover) ###########################
-            if prev_time != curr_time:
+            if prev_time != curr_time and initial_rows_eq_df == rows_eq_df:
                 stock_list = []
                 duration = curr_time - prev_time_1
                 create_spot_sheets(eq_df,"Price",curr_time,duration,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff,col_number_1,stock_list)                               
@@ -625,9 +649,9 @@ while True:
                 curr_turn_diff = []
                 row_number += 1                    
             prev_time = curr_time
+        else:
+            logger.warning(f'Error getting Equity Data - Equity DataFrame is Null')
             ####################### End - Spot Data (Price,Volume,Turnover) ###########################               
-        except Exception as e:
-            logger.critical(f'Error getting Equity Data - {e}')
     ####################### EquityData Ends ###########################
 
     ####################### FuturesData Starts ###########################
@@ -641,7 +665,8 @@ while True:
             fd_df = nse.futures_data(fd_sym, indices)
             fd.range("G1").value = fd_df
         except Exception as e:
-            logger.critical(f'Error getting Futures Data - {e}')
+            logger.warning(f'Error getting Futures Data - {e}')
+            pass
     ####################### FuturesData Ends ###########################
 
 

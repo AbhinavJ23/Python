@@ -34,14 +34,23 @@ class NSE:
     
     def equity_market_data(self, category, symbol_list=False):
         category = category.upper().replace(' ', '%20').replace('&', '%26')
-        data = self.session.get(f'https://www.nseindia.com/api/equity-stockindices?index={category}', headers=self.headers).json()["data"]
-        df = pd.DataFrame(data)
-        df = df.drop("meta", axis=1)
-        df = df.set_index('symbol', drop=True)
-        if symbol_list:
-            return list(df.index)
+        #data = self.session.get(f'https://www.nseindia.com/api/equity-stockindices?index={category}', headers=self.headers).json()["data"]
+        response = self.session.get(f'https://www.nseindia.com/api/equity-stockindices?index={category}', headers=self.headers)
+        response.raise_for_status()
+        if response.status_code != 401:
+            try:
+                data = response.json()["data"]
+                df = pd.DataFrame(data)
+                df = df.drop("meta", axis=1)
+                df = df.set_index('symbol', drop=True)
+                if symbol_list:
+                    return list(df.index)
+                else:
+                    return df
+            except ValueError:
+                print("Function equity_market_data - Decoding JSON has failed")
         else:
-            return df
+            return None
         
     def about_holidays(self, category):
         data = self.session.get(f'https://www.nseindia.com/api/holiday-master?type={category.lower()}', headers=self.headers).json()
@@ -50,9 +59,17 @@ class NSE:
     
     def equity_info(self, symbol, trade_info=False):
         symbol = symbol.replace(' ', '%20').replace('&', '%26')
-        data = self.session.get("https://www.nseindia.com/api/quote-equity?symbol=" + symbol + ("&section=trade_info" if trade_info else ""),
-                                headers=self.headers).json()
-        return data
+        #data = self.session.get("https://www.nseindia.com/api/quote-equity?symbol=" + symbol + ("&section=trade_info" if trade_info else ""), headers=self.headers).json()
+        response = self.session.get("https://www.nseindia.com/api/quote-equity?symbol=" + symbol + ("&section=trade_info" if trade_info else ""), headers=self.headers)
+        response.raise_for_status()
+        if response.status_code != 401:
+            try:
+                data = response.json()
+                return data
+            except ValueError:
+                print("Function equity_info - Decoding JSON has failed")
+        else:
+            return None            
     
     def futures_data(self, symbol, indices=False):
         symbol = symbol.replace(' ', '%20').replace('&', '%26')
