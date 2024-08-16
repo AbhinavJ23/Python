@@ -6,12 +6,46 @@ import dateutil.parser
 import numpy as np
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+from base_logger import logger
+import ctypes
 
 ####################### Initializing Logging Start #######################
-logging.basicConfig(filename='Nse_Data_'+time.strftime('%Y%m%d%H%M%S')+'.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger()
+#logging.basicConfig(filename='Nse_Data_'+time.strftime('%Y%m%d%H%M%S')+'.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+#logger = logging.getLogger()
 ####################### Initializing Logging End #######################
+############################# Start - Function to check validity,expiry #############################
+def check_validity():
+    valid_from_str = '15/08/2024 00:00:00'
+    valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
+    #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
+    #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
+    #valid_till_str = '17/08/2024 22:30:30'   
+    valid_till_time = valid_from_time + timedelta(days=5)
+    time_now = datetime.now()
+    time_left = valid_till_time - time_now
+    logger.debug(f'Time Left - {time_left}')
+    logger.debug(f'Days left - {time_left.days}')
+    total_seconds = time_left.total_seconds()
+    logger.debug(f'Total Seconds Left - {total_seconds}')
+    if total_seconds < 0:
+        ctypes.windll.user32.MessageBoxW(0, "Your product trial period has expired!", "Error",0)
+        return False
+    else:    
+        #hours = round((total_seconds - time_left.days*24*60*60)/3600)
+        #minutes = round((total_seconds // 60) % 60)
+        #seconds = round(total_seconds % 60)
+        hours = int((total_seconds - time_left.days*24*60*60)//3600)
+        minutes = int((total_seconds - time_left.days*24*60*60 - hours*60*60)//60)
+        seconds = round(total_seconds - time_left.days*24*60*60 - hours*60*60 - minutes*60)
+        message = "Your product trial period will expire in " + str(time_left.days) + " day(s) " + str(hours) +" hours(s) " + str(minutes) + " min(s) and " + str(seconds) + " second(s)"
+        ctypes.windll.user32.MessageBoxW(0, message, "Warning",0)
+        return True
+############################# End - Function to check validity,expiry #############################
+
+status = check_validity()
+if not status:
+   sys.exit()
 
 nse = NSE()
 
@@ -54,14 +88,13 @@ MAX_VOLUME_PERCENT_DIFF = 500
 MAX_TURNOVER_PERCENT_DIFF = 500
 MAX_TURNOVER_VALUE_DIFF = 50000000
 ONE_CRORE = 10000000
-CUMULATIVE_TURNOVER_DURATION = 5
-CUMULATIVE_TURNOVER = 100000000
-#MAX_PRICE_ERROR_THRESHOLD = 20
+CUMULATIVE_TURNOVER_DURATION = 15
+CUMULATIVE_TURNOVER = 250000000
 
 ####################### Initializing Excel Sheets #######################
 oc.range('1:1').font.bold = True
 oc.range('1:1').color = COLOR_GREY
-oc.range('C1:C500').color = COLOR_GREY
+oc.range('C1:C200').color = COLOR_GREY
 oc.range('G1:G500').color = COLOR_GREY
 oc.range('C1').column_width = 2
 oc.range('G1').column_width = 2
@@ -79,16 +112,18 @@ logger.debug("Excel sheets initialized")
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
 try:    
-    df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
+    oc_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
 except Exception as e:
     logger.critical(f'Error getting FNO symbols for Options Data - {e}')
-df = df.set_index("FNO Symbol", drop=True)
-oc.range("A1").value = df
+oc_df = oc_df.set_index("FNO Symbol", drop=True)
+oc.range("A1").value = oc_df
 oc.range("A1:A200").autofit()
 oc.range("D2").value, oc.range("D3").value = "Enter Symbol ->", "Enter Expiry ->"
 oc.range('D2').font.bold = True
 oc.range('D3').font.bold = True
 oc.range("D2:E3").autofit()
+oc.range('A200:B200').color = COLOR_GREY
+oc.range('D20:F20').color = COLOR_GREY
 pre_oc_sym = pre_oc_exp = None
 exp_list = []
 logger.debug("OptionChain sheet initialized")
@@ -102,9 +137,17 @@ eq.range("A1:A50").autofit()
 eq.range("D2").value, eq.range("D3").value = "Enter Index ->", "Enter Equity ->"
 eq.range('D2').font.bold = True
 eq.range('D3').font.bold = True
-eq.range("D2:E3").autofit()
 eq.range('A35:G35').color = COLOR_GREY
+eq.range("D1").value = "Index Time"
+eq.range("D1").autofit()
+eq.range("F1").value = "Equity Time"
+eq.range("F1").autofit()
+eq.range("F2").value = "Index Value"
+eq.range('F2').font.bold = True
 pre_ind_sym = pre_eq_sym = None
+eq.range("F3").value = "Equity Value"
+eq.range('F3').font.bold = True
+eq.range("D2:E3").autofit()
 logger.debug("EquityData sheet initialized")
 
 ####################### Initializing FuturesData sheet #######################
@@ -175,7 +218,8 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
     else:
         logger.error(f'Error! Unexpected Input - {sh_type}')
 
-    sh.range('1:1').color = COLOR_GREY
+    if row_number == 1:
+        sh.range("A1:ZZ1").color = COLOR_GREY        
     sh.range(f'A{row_number + 1}').font.bold = True
     
     spot_df1 = spot_df.transpose()
@@ -197,8 +241,8 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
             sh.range(f'{get_col_name(col_number+1)}' + str(row_number)).value = "Difference"
             if sh_type in ("Volume","Turnover"):
                 sh.range(f'{get_col_name(col_number+2)}' + str(row_number)).value = "% Change"
-            sh.range('1:1').font.bold = True
-            sh.range("A1:ZZ1").autofit()
+            #sh.range('1:1').font.bold = True
+            #sh.range("A1:ZZ1").autofit()
             sh.range(f'A{row_number + 1}').value = time
             prev_spot.append(spot_value)
         else:                  
@@ -278,7 +322,9 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
                         cum_price_diff_dict[col_name] = cum_price_diff_dict[col_name] + val_diff             
         iter += 1
         col_number += 3
-
+    if row_number == 1:
+        sh.range("A1:ZZ1").font.bold = True
+        sh.range("A1:ZZ1").autofit()
     if sh_type in ("Volume","Turnover"):
         create_max_sheet(sh_type,time,duration,row_number,col_number_1,vol_list,turn_list,stock_list)
 ############################# End - Function to create Spot sheets #############################
@@ -426,19 +472,35 @@ while True:
             oc.range("B:B").value = oc.range("D6:E19").value = None
             exp_list = []
         pre_oc_sym = oc_sym
-        pre_oc_exp = oc_exp    
+        pre_oc_exp = oc_exp
+    df = None  
     if oc_sym is not None:
-        indices = True if oc_sym == "NIFTY" or oc_sym == "BANKNIFTY" else False
-        try:
-            if not exp_list:
-                for i in list(nse.options_data(oc_sym, indices)["expiryDate"]):
-                    if dateutil.parser.parse(i).date() not in exp_list:
-                        exp_list.append(dateutil.parser.parse(i).date())
-                df = pd.DataFrame({"Expiry Date": [str(i) for i in sorted(exp_list)]})
-                df = df.set_index("Expiry Date", drop=True)
-                oc.range("B1").value = df
+        indices = True if oc_sym == "NIFTY" or oc_sym == "BANKNIFTY" else False        
+        if not exp_list:
+            logger.debug('Creating the Options expiry list')
+            for i in list(nse.options_data(oc_sym, indices)["expiryDate"]):
+                if dateutil.parser.parse(i).date() not in exp_list:
+                    exp_list.append(dateutil.parser.parse(i).date())
+            if exp_list:
+                exp_df = pd.DataFrame({"Expiry Date": [str(i) for i in sorted(exp_list)]})
+                exp_df = exp_df.set_index("Expiry Date", drop=True)
+                oc.range("B1").value = exp_df
                 oc.range("B1").autofit()
-            df = nse.options_data(oc_sym, indices)
+                logger.debug('Options expiry list created')
+            else:
+                logger.error(f'Error getting Options Expiry Dates - {e}')
+                time.sleep(5)
+                logger.debug("Trying to connect again...")
+                nse = NSE()
+                continue
+        #try:
+        #    df = nse.options_data(oc_sym, indices)
+        #except Exception as e:
+        #    logger.error(f'Error getting Options Data - {e}')
+        #    time.sleep(5)
+        #    continue
+        df = nse.options_data(oc_sym, indices)
+        if df is not None and oc_exp is not None:
             df["expiryDate"] = df["expiryDate"].apply(lambda x: dateutil.parser.parse(x))
             df = df[df["expiryDate"] == oc_exp]
             timestamp = list(df["timestamp"])[0]
@@ -462,8 +524,8 @@ while True:
             df["Strike"] = df.index
             df.index = [np.nan] * len(df)
 
-            oc.range("D6").value = [["Timestamp", timestamp],
-                                    ["Spot LTP", underlying_value],
+            #oc.range("D6").value = [["Timestamp", timestamp],
+            oc.range("D6").value = [["Spot LTP", underlying_value],
                                     ["Total Call OI", sum(list(df["CE OI"]))],
                                     ["Total Put OI", sum(list(df["PE OI"]))],
                                     ["",""],
@@ -479,11 +541,16 @@ while True:
                                     ["Max Put Change in OI Strike",
                                      list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
                                     ]
-            oc.range("E6").autofit()
+            oc.range("D1").value = "Timestamp"
+            oc.range("E1").value = timestamp
+            #oc.range("E6").autofit()
             oc.range("G1").value = df
-        except Exception as e:
-            logger.warning(f'Error getting Options Data - {e}')
-            pass
+        else:
+            logger.error(f'Error getting Options Data - Either Options DataFrame is Null or Expiry date is not entered')
+            time.sleep(5)
+            logger.debug("Trying to connect again...")
+            nse = NSE()
+            continue           
     ####################### OptionChain Ends ###########################
 
     ####################### EquityData Starts ###########################
@@ -492,7 +559,7 @@ while True:
         eq_sym = None
         eq.range("I1:AD510").value = eq.range("D5:H30").value = None
         eq.range("E1").value = eq.range("G1").value = None
-        eq.range("E3").value = eq.range("F2").value = eq.range("G2").value = None
+        eq.range("E3").value = eq.range("G2").value = None
         sv.clear()
         sp.clear()
         st.clear()
@@ -520,18 +587,19 @@ while True:
 
     if pre_eq_sym != eq_sym:
         eq.range("D5:H30").value = None
-        eq.range("F3").value = None
+        #eq.range("F3").value = None
         eq.range("G3").value = None
     pre_ind_sym = ind_sym
     pre_eq_sym = eq_sym
     eq_df = None
     if ind_sym is not None:
-        try:
-            eq_df = nse.equity_market_data(ind_sym)
-        except Exception as e:
-            logger.warning(f'Error getting Equity Data - {e}')
-            time.sleep(5)
-            continue
+        #try:
+        #    eq_df = nse.equity_market_data(ind_sym)
+        #except Exception as e:
+        #    logger.error(f'Error getting Equity Data - {e}')
+        #    time.sleep(5)
+        #    continue
+        eq_df = nse.equity_market_data(ind_sym)
         if eq_df is not None:
             eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series","identifier"],
                        axis=1,inplace=True)
@@ -540,34 +608,24 @@ while True:
             eq_df = eq_df.loc[sorted_idx]
             rows_eq_df = len(eq_df.index)
             eq.range("I1").value = eq_df
-            eq.range("D1").value = "Index Timestamp"
-            eq.range("D1").autofit()
             eq.range("E1").value = eq_df.loc[ind_sym,'lastUpdateTime']
-            eq.range("E1").autofit()
-            eq.range("F1").value = "Equity Timestamp"
-            eq.range("F1").autofit()
-            eq.range("F2").value = "Index Value"
-            eq.range('F2').font.bold = True
             eq.range("G2").value = eq_df.loc[ind_sym,'lastPrice']
-            #eq.range("G1").value = eq.range("V2").value
             eq.range("G1").value = eq_df.iloc[0]['lastUpdateTime']
             curr_time = eq.range("G1").value
-            eq.range("G1").autofit()
-            if eq_sym is not None:
-                data = None
-                try:
-                    data = nse.equity_info(eq_sym, trade_info=True)
-                except Exception as e:
-                    logger.warning(f'Error getting Equity Info for {eq_sym} - {e}')
-                    time.sleep(5)
-                    continue
+            #eq.range("G1").autofit()
+            data = None
+            if eq_sym is not None:                
+                #try:
+                #    data = nse.equity_info(eq_sym, trade_info=True)
+                #except Exception as e:
+                #    logger.error(f'Error getting Equity Info for {eq_sym} - {e}')
+                #    time.sleep(5)
+                #    continue
+                data = nse.equity_info(eq_sym, trade_info=True)
                 if data is not None:
                     bid_list = ask_list = trd_data = []
                     tot_buy = tot_sell = 0
-                    eq.range("F3").value = "Equity Value"
-                    eq.range('F3').font.bold = True
                     eq.range("G3").value = eq_df.loc[eq_sym,'lastPrice']
-
                     for key,value in data.items():
                         if str(key) == "marketDeptOrderBook":
                             for k,v in value.items():
@@ -603,8 +661,12 @@ while True:
                     eq.range("F22").value = "TotalBidQtySell"
                     eq.range("G22").value = tot_sell
                 else:
-                    logger.warning(f'Error getting Equity Info for {eq_sym} - Equity Info Data is Null')
-
+                    logger.error(f'Error getting Equity Info for {eq_sym} - Equity Info Data is Null')
+                    time.sleep(5)
+                    logger.debug("Trying to connect again...")
+                    nse = NSE()
+                    continue
+                    
             if row_number == 1:
                 initial_rows_eq_df = len(eq_df.index)
             logger.debug(f'For Time {curr_time} and row number {row_number}, initial stocks - {initial_rows_eq_df} and current stocks - {rows_eq_df}')
@@ -650,7 +712,11 @@ while True:
                 row_number += 1                    
             prev_time = curr_time
         else:
-            logger.warning(f'Error getting Equity Data - Equity DataFrame is Null')
+            logger.error(f'Error getting Equity Data - Equity DataFrame is Null')
+            time.sleep(5)
+            logger.debug("Trying to connect again...")
+            nse = NSE()
+            continue
             ####################### End - Spot Data (Price,Volume,Turnover) ###########################               
     ####################### EquityData Ends ###########################
 
@@ -659,14 +725,18 @@ while True:
     if pre_fd_sym != fd_sym:
         fd.range("G1:AD100").value = None
         pre_fd_sym = fd_sym
+    fd_df = None
     if fd_sym is not None:
         indices = True if fd_sym == "NIFTY" or fd_sym == "BANKNIFTY" else False
-        try:
-            fd_df = nse.futures_data(fd_sym, indices)
+        fd_df = nse.futures_data(fd_sym, indices)
+        if fd_df is not None:
             fd.range("G1").value = fd_df
-        except Exception as e:
-            logger.warning(f'Error getting Futures Data - {e}')
-            pass
+        else:
+            logger.error(f'Error getting Futures Data - Futures DataFrame is Null')
+            time.sleep(5)
+            logger.debug("Trying to connect again...")
+            nse = NSE()
+            continue
     ####################### FuturesData Ends ###########################
 
 
