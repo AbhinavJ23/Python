@@ -5,10 +5,12 @@ import xlwings as xw
 import dateutil.parser
 import numpy as np
 import time
-import logging
+#import logging
 from datetime import datetime, timedelta
 from base_logger import logger
 import ctypes
+#from py_vollib.black_scholes.implied_volatility import implied_volatility
+from py_vollib.black_scholes.greeks.analytical import delta,gamma,rho,theta,vega
 
 ####################### Initializing Logging Start #######################
 #logging.basicConfig(filename='Nse_Data_Historical_'+time.strftime('%Y%m%d%H%M%S')+'.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -17,7 +19,7 @@ import ctypes
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '15/08/2024 00:00:00'
+    valid_from_str = '26/08/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
     #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
@@ -75,6 +77,7 @@ COLOR_GREY = (211, 211, 211)
 COLOR_GREEN = (0, 255, 0)
 COLOR_RED = (255, 0, 0)
 COLOR_YELLOW = (255, 255, 0)
+RISK_FREE_INT_RATE = 0.05
 
 ####################### Initializing Excel Sheets #######################
 oc.range('1:1').font.bold = True
@@ -175,15 +178,54 @@ def get_col_name(num):
             return get_col_name(q) + alpha[r-1]
 ############################# End - Function to get excel column(A1,B1 etc) given a positive integer #############################
 
+############################# Start - Function to get option greeks #############################
+def get_option_greeks(df, call_or_put, expiry):
+    time = ((datetime(expiry.year, expiry.month, expiry.day, 15, 30) - datetime.now()) / timedelta(days=1)) / 365
+    #time = (datetime(expiry.year, expiry.month, expiry.day, 15, 30) - datetime.now()).total_seconds() / (60*60*24*365)
+    logger.debug (f'Time to Expiry in Years - {time}')
+    int_rate = RISK_FREE_INT_RATE
+    greek_list = []
+    try:
+        for i, row in df.iterrows():
+            strike = i            
+            if call_or_put == 'c':
+                last_price = row['CE LTP']
+                imp_vol = row['CE IV']
+            elif call_or_put == 'p':
+                last_price = row['PE LTP']
+                imp_vol = row['PE IV']
+            #logger.debug(f'underlying_price - {last_price}, Strike - {strike}, time - {time}, imp vol - {imp_vol}')
+            if last_price <= 0 or imp_vol <= 0:
+                 greek_list.append({"Delta": 0, "Gamma": 0, "Theta": 0, "Vega": 0, "Rho": 0})
+            else:
+                Delta = delta(call_or_put, last_price, strike, time, int_rate, imp_vol)
+                Gamma = gamma(call_or_put, last_price, strike, time, int_rate, imp_vol)
+                Theta = theta(call_or_put, last_price, strike, time, int_rate, imp_vol)
+                Vega = vega(call_or_put, last_price, strike, time, int_rate, imp_vol)
+                Rho = rho(call_or_put, last_price, strike, time, int_rate, imp_vol)
+                greek_list.append({"Delta": Delta, "Gamma": Gamma, "Theta": Theta, "Vega": Vega, "Rho": Rho})
+    except Exception as e:
+        logger.error(f'Error getting Option Greeks - {e}')
+        empty_df = pd.DataFrame(index=df.index, columns=['Delta','Gamma','Theta','Vega','Rho'])
+        empty_df.fillna(0)
+        return empty_df
+    
+    greek_df = pd.DataFrame(greek_list, index=df.index)
+    return greek_df
+############################# End - Function to get option greeks #############################
+
 while True:
     time.sleep(1)
     ############################# OptionChain Starts #############################
     oc_sym, oc_exp = oc.range("E2").value, oc.range("E3").value    
     if pre_oc_sym != oc_sym or pre_oc_exp != oc_exp:
-        oc.range("G1:V4000").value = None
+        oc.range("G1:AD50000").value = None
+        oc_row_number = 1
+        oc_df_flag = True
         if pre_oc_sym != oc_sym:
             oc.range("B:B").value = oc.range("D6:E19").value = None
             exp_list = []
+            oc_exp = None
         pre_oc_sym = oc_sym
         pre_oc_exp = oc_exp
     df = None    
@@ -201,7 +243,7 @@ while True:
                 oc.range("B1").value = exp_df
                 oc.range("B1").autofit()
                 logger.debug('Options expiry list created')
-                logger.debug(exp_df)
+                #logger.debug(exp_df)
             else:
                 logger.error(f'Error getting Options Expiry Dates - {e}')
                 time.sleep(5)
@@ -231,13 +273,28 @@ while True:
             ce_df.set_index("strikePrice", drop=True, inplace=True)
             ce_df["Strike"] = ce_df.index
 
+            ce_df_greeks = get_option_greeks(ce_df, 'c', oc_exp)
+            ce_df_greeks = ce_df_greeks.rename(columns={"Delta":"CE Delta", "Gamma":"CE Gamma", "Theta":"CE Theta", "Vega":"CE Vega",
+                                                        "Rho":"CE Rho"})
+            #logger.debug("CE DF Greeks:")
+            #logger.debug(ce_df_greeks)
+            ce_df_final = pd.concat([ce_df_greeks,ce_df], axis=1).sort_index()
+
             pe_df = df[df["instrumentType"] == "PE"]
             pe_df = pe_df[["strikePrice","openInterest","changeinOpenInterest","impliedVolatility","lastPrice","change","totalTradedVolume"]]
             pe_df = pe_df.rename(columns={"openInterest":"PE OI", "changeinOpenInterest":"PE Change in OI", "impliedVolatility":"PE IV",
                                           "lastPrice":"PE LTP", "change":"PE LTP Change", "totalTradedVolume":"PE Volume"})
             pe_df.set_index("strikePrice", drop=True, inplace=True)
 
-            df = pd.concat([ce_df,pe_df], axis=1).sort_index()
+            pe_df_greeks = get_option_greeks(pe_df, 'p', oc_exp)
+            pe_df_greeks = pe_df_greeks[["Rho", "Vega", "Theta", "Gamma", "Delta"]]
+            pe_df_greeks = pe_df_greeks.rename(columns={"Delta":"PE Delta", "Gamma":"PE Gamma", "Theta":"PE Theta", "Vega":"PE Vega",
+                                                        "Rho":"PE Rho"})
+            #logger.debug("PE DF Greeks:")
+            #logger.debug(pe_df_greeks)
+            pe_df_final = pd.concat([pe_df, pe_df_greeks], axis=1).sort_index()
+
+            df = pd.concat([ce_df_final,pe_df_final], axis=1).sort_index()
             df = df.replace(np.nan, 0)
             df["Strike"] = df.index
             df.index = [np.nan] * len(df)
@@ -259,13 +316,14 @@ while True:
                                     ["Max Put Change in OI Strike",
                                      list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
                                     ]
-            oc.range("D1").value = "Timestamp"
+            oc.range("D1").value = "Current Time"
             oc.range("E1").value = timestamp
             oc_curr_time = oc.range("E1").value
             #oc.range("E1").autofit()           
             #oc.range("G1").value = df
             if oc_row_number == 1 and oc_df_flag:
                 logger.debug(f'Printing the options expiry df for the first time at {oc_curr_time}')
+                oc.range("F1").value = timestamp
                 oc.range(f'G{oc_row_number}').value = df
                 oc_df_flag = False
 
@@ -279,21 +337,22 @@ while True:
                 logger.debug(f'Printing the options expiry df for the next time at {oc_curr_time}')
                 oc_row_number += rows_oc_df
                 oc_row_number += 1
-                oc.range(f'G{oc_row_number}' + ':' + f'T{oc_row_number}').color = COLOR_GREY               
+                oc.range(f'G{oc_row_number}' + ':' + f'AD{oc_row_number}').color = COLOR_GREY               
                 oc.range(f'G{oc_row_number}').value = df                            
                 oc.range(f'F{oc_row_number}').value = oc_curr_time
                 #oc.range(f'F{oc_row_number}').autofit()
                 oc.range(f'F{oc_row_number}').font.bold = True
-                oc.range(f'G{oc_row_number}' + ':' + f'T{oc_row_number}').font.bold = True
+                oc.range(f'G{oc_row_number}' + ':' + f'AD{oc_row_number}').font.bold = True
 
             if oc_row_number == 1 or (oc_row_number > 1 and duration is not None and duration.total_seconds() > 0):
                 oc_prev_time = oc_curr_time
         else:
             logger.error(f'Error getting Options Data - Either Options DataFrame is Null or Expiry date is not entered')
-            time.sleep(5)
-            logger.debug("Trying to connect again...")
-            nse = NSE()
-            continue            
+            if df is None:
+                time.sleep(5)
+                logger.debug("Trying to connect again...")
+                nse = NSE()
+                continue            
     ####################### OptionChain Ends ###########################
 
     ####################### EquityData Starts ###########################
@@ -360,7 +419,9 @@ while True:
                 #    continue
                 data = nse.equity_info(eq_sym, trade_info=True)
                 if data is not None:
-                    bid_list = ask_list = trd_data = []
+                    bid_list = ask_list = [] #trd_data = security_wise_dp = []
+                    trd_data = []
+                    security_wise_dp = []
                     tot_buy = tot_sell = 0
                     eq.range("G3").value = eq_df.loc[eq_sym,'lastPrice']
                     for key,value in data.items():
@@ -375,8 +436,9 @@ while True:
                                 elif str(k) == "totalBuyQuantity":
                                     tot_buy = v
                                 elif str(k) == "totalSellQuantity":
-                                    tot_sell = v
-                            break
+                                    tot_sell = v                   
+                        elif str(key) == "securityWiseDP":
+                            security_wise_dp.append(value)
 
                     bid_df = pd.DataFrame(bid_list)
                     bid_df.rename(columns={"price":"Bid Price","quantity":"Bid Quantity"},inplace=True)
@@ -386,17 +448,22 @@ while True:
                     bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
 
                     trd_df = pd.DataFrame(trd_data).transpose()
+                    security_wise_dp_df = pd.DataFrame(security_wise_dp).transpose()
                     eq.range("D5").value = trd_df
                     eq.range("E5").value = None
                     eq.range("F6").value = "Lakhs"
                     eq.range("F7").value = "₹ Cr"
                     eq.range("F8").value = "₹ Cr"
                     eq.range("F9").value = "₹ Cr"
-                    eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
-                    eq.range("D22").value = "TotalBidQtyBuy"
-                    eq.range("E22").value = tot_buy
-                    eq.range("F22").value = "TotalBidQtySell"
-                    eq.range("G22").value = tot_sell
+                    eq.range("D15").value = security_wise_dp_df
+                    eq.range("E15").value = None
+                    eq.range("F18").value = "%"               
+                    eq.range("D22").options(pd.DataFrame, index=False).value = bid_ask_df
+                    eq.range("D28").value = "TotalBuyQty"
+                    eq.range("E28").value = tot_buy
+                    eq.range("F28").value = "TotalSellQty"
+                    eq.range("G28").value = tot_sell
+                    
                 else:
                     logger.error(f'Error getting Equity Info for {eq_sym} - Equity Info Data is Null')
                     time.sleep(5)

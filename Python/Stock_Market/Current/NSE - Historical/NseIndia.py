@@ -41,8 +41,8 @@ class NSE:
         try:
             response = self.session.get(f'https://www.nseindia.com/api/equity-stockindices?index={category}', headers=self.headers)
             response.raise_for_status()
-        except requests.HTTPError as e:
-            logger.error(f'Function equity_market_data - HTTPError - {e}')
+        except (requests.HTTPError, requests.exceptions.ConnectionError) as e:
+            logger.error(f'Function equity_market_data - Error - {e}')
             #logger.debug(f'HTTPStatus is - {HTTPStatus.description()}')
             #logger.debug(f'Exception Status code - {e.response.status_code()}')
             #self.__init__()
@@ -57,7 +57,7 @@ class NSE:
                     return list(df.index)
                 else:
                     return df
-            except ValueError as e:
+            except (ValueError,KeyError) as e:
                 logger.error(f'Function equity_market_data - Decoding JSON has failed - {e}')
                 return None
         else:
@@ -74,14 +74,14 @@ class NSE:
         try:
             response = self.session.get("https://www.nseindia.com/api/quote-equity?symbol=" + symbol + ("&section=trade_info" if trade_info else ""), headers=self.headers)
             response.raise_for_status()
-        except requests.HTTPError as e:
-            logger.error(f'Function equity_info - HTTPError - {e}')
+        except (requests.HTTPError, requests.exceptions.ConnectionError) as e:
+            logger.error(f'Function equity_info - Error - {e}')
             return None
         if response.status_code != 401:
             try:
                 data = response.json()
                 return data
-            except ValueError as e:
+            except (ValueError,KeyError) as e:
                 logger.error(f'Function equity_info - Decoding JSON has failed - {e}')
                 return None
         else:
@@ -93,8 +93,8 @@ class NSE:
         try:
             response = self.session.get("https://www.nseindia.com/api/quote-derivative?symbol=" + symbol, headers=self.headers)
             response.raise_for_status()
-        except requests.HTTPError as e:
-            logger.error(f'Function futures_data - HTTPError - {e}')
+        except (requests.HTTPError, requests.exceptions.ConnectionError) as e:
+            logger.error(f'Function futures_data - Error - {e}')
             return None
         if response.status_code != 401:
             try:
@@ -107,7 +107,7 @@ class NSE:
                 df = pd.DataFrame(temp_data)
                 df = df.set_index("identifier", drop=True)
                 return df
-            except ValueError as e:
+            except (ValueError,KeyError) as e:
                 logger.error(f'Function futures_data - Decoding JSON has failed - {e}')
                 return None
         else:
@@ -123,8 +123,8 @@ class NSE:
         try:
             response = self.session.get(url, headers=self.headers)
             response.raise_for_status()
-        except requests.HTTPError as e:
-            logger.error(f'Function options_data - HTTPError - {e}')
+        except (requests.HTTPError, requests.exceptions.ConnectionError) as e:
+            logger.error(f'Function options_data - Error - {e}')
             return None        
         if response.status_code != 401:
             try:
@@ -140,7 +140,7 @@ class NSE:
                 df = pd.DataFrame(op_data)
                 df = df.set_index("identifier", drop=True)
                 return df
-            except ValueError as e:
+            except (ValueError,KeyError) as e:
                 logger.error(f'Function options_data - Decoding JSON has failed - {e}')
                 return None
         else:

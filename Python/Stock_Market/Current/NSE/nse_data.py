@@ -5,7 +5,7 @@ import xlwings as xw
 import dateutil.parser
 import numpy as np
 import time
-import logging
+#import logging
 from datetime import datetime, timedelta
 from base_logger import logger
 import ctypes
@@ -16,7 +16,7 @@ import ctypes
 ####################### Initializing Logging End #######################
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '15/08/2024 00:00:00'
+    valid_from_str = '26/08/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
     #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
@@ -220,7 +220,7 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
 
     if row_number == 1:
         sh.range("A1:ZZ1").color = COLOR_GREY        
-    sh.range(f'A{row_number + 1}').font.bold = True
+    #sh.range(f'A{row_number + 1}').font.bold = True
     
     spot_df1 = spot_df.transpose()
     col_number = 2
@@ -243,10 +243,14 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
                 sh.range(f'{get_col_name(col_number+2)}' + str(row_number)).value = "% Change"
             #sh.range('1:1').font.bold = True
             #sh.range("A1:ZZ1").autofit()
-            sh.range(f'A{row_number + 1}').value = time
+            if iter == 0:
+                sh.range(f'A{row_number + 1}').value = time
+                sh.range(f'A{row_number + 1}').font.bold = True
             prev_spot.append(spot_value)
-        else:                  
-            sh.range(f'A{row_number + 1}').value = time.strftime('%H:%M:%S')
+        else:
+            if iter == 0:                  
+                sh.range(f'A{row_number + 1}').value = time.strftime('%H:%M:%S')
+                sh.range(f'A{row_number + 1}').font.bold = True
             sh.range(f'{get_col_name(col_number)}'+ str(row_number+1)).value = spot_value
             curr_spot.append(spot_value)           
             if curr_spot[iter] is not None and prev_spot[iter] is not None:
@@ -547,10 +551,11 @@ while True:
             oc.range("G1").value = df
         else:
             logger.error(f'Error getting Options Data - Either Options DataFrame is Null or Expiry date is not entered')
-            time.sleep(5)
-            logger.debug("Trying to connect again...")
-            nse = NSE()
-            continue           
+            if df is None:
+                time.sleep(5)
+                logger.debug("Trying to connect again...")
+                nse = NSE()
+                continue           
     ####################### OptionChain Ends ###########################
 
     ####################### EquityData Starts ###########################
@@ -656,9 +661,9 @@ while True:
                     eq.range("F8").value = "₹ Cr"
                     eq.range("F9").value = "₹ Cr"
                     eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
-                    eq.range("D22").value = "TotalBidQtyBuy"
+                    eq.range("D22").value = "TotalBuyQty"
                     eq.range("E22").value = tot_buy
-                    eq.range("F22").value = "TotalBidQtySell"
+                    eq.range("F22").value = "TotalSellQty"
                     eq.range("G22").value = tot_sell
                 else:
                     logger.error(f'Error getting Equity Info for {eq_sym} - Equity Info Data is Null')
@@ -675,9 +680,13 @@ while True:
             if prev_time != curr_time and initial_rows_eq_df == rows_eq_df:
                 stock_list = []
                 duration = curr_time - prev_time_1
-                create_spot_sheets(eq_df,"Price",curr_time,duration,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff,col_number_1,stock_list)                               
-                create_spot_sheets(eq_df,"Volume",curr_time,duration,row_number,prev_vol,curr_vol,prev_vol_diff,curr_vol_diff,col_number_1,stock_list)
-                create_spot_sheets(eq_df,"Turnover",curr_time,duration,row_number,prev_turn,curr_turn,prev_turn_diff,curr_turn_diff,col_number_1,stock_list)                
+                try:
+                    create_spot_sheets(eq_df,"Price",curr_time,duration,row_number,prev_price,curr_price,prev_price_diff,curr_price_diff,col_number_1,stock_list)                               
+                    create_spot_sheets(eq_df,"Volume",curr_time,duration,row_number,prev_vol,curr_vol,prev_vol_diff,curr_vol_diff,col_number_1,stock_list)
+                    create_spot_sheets(eq_df,"Turnover",curr_time,duration,row_number,prev_turn,curr_turn,prev_turn_diff,curr_turn_diff,col_number_1,stock_list)
+                except Exception as e:
+                    logger.error(f'Error Creating Spot Sheets - {e}')
+                    continue
                 if row_number >= 2:
                     col_number_1 += 4
                     price_vol_dict_flag = True
