@@ -78,6 +78,7 @@ COLOR_GREEN = (0, 255, 0)
 COLOR_RED = (255, 0, 0)
 COLOR_YELLOW = (255, 255, 0)
 RISK_FREE_INT_RATE = 0.05
+DELIVERY_CHANGE_DURATION = 60
 
 ####################### Initializing Excel Sheets #######################
 oc.range('1:1').font.bold = True
@@ -157,10 +158,10 @@ logger.debug("FuturesData sheet initialized")
 eq_row_number = 1
 oc_row_number = 1
 eq_prev_time = eq_curr_time = None
+eq_prev_time_1 = None
 oc_prev_time = oc_curr_time = None
 eq_df_flag = True
 oc_df_flag = True
-#prev_time_1 = datetime.now()
 
 ############################# Start - Function to get excel column(A1,B1 etc) given a positive number #############################
 alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -214,6 +215,31 @@ def get_option_greeks(df, call_or_put, expiry):
     return greek_df
 ############################# End - Function to get option greeks #############################
 
+############################# Start - Function to get delivery info ###########################
+def get_delivery_info(df):
+    delivery_info_list = []
+    for i in df.index:
+        symbol = i
+        if symbol != 'NIFTY 50':
+            data = nse.equity_info(symbol, trade_info=True)
+            if data is not None:
+                for key,value in data.items():              
+                    if str(key) == "securityWiseDP":
+                        delivery_info_list.append(value)
+            else:
+                logger.error(f'Error getting Delivery Info for {symbol} - Delivery Info Data is Null')
+                empty_df = pd.DataFrame(index=df.index, columns=['quantityTraded','deliveryQuantity','deliveryToTradedQuantity'])
+                empty_df.fillna(0)
+                return empty_df
+        else:
+            delivery_info_list.append({"quantityTraded": 'NA', "deliveryQuantity": 'NA', "deliveryToTradedQuantity": 'NA'})
+    
+    delivery_info_df = pd.DataFrame(delivery_info_list, index=df.index)
+    delivery_info_df.drop(["seriesRemarks","secWiseDelPosDate"],axis=1,inplace=True)
+    return delivery_info_df
+
+############################# End - Function to get delivery info #############################
+
 while True:
     time.sleep(1)
     ############################# OptionChain Starts #############################
@@ -221,6 +247,7 @@ while True:
     if pre_oc_sym != oc_sym or pre_oc_exp != oc_exp:
         oc.range("G1:AD50000").value = None
         oc_row_number = 1
+        oc_prev_time = oc_curr_time = None
         oc_df_flag = True
         if pre_oc_sym != oc_sym:
             oc.range("B:B").value = oc.range("D6:E19").value = None
@@ -359,12 +386,13 @@ while True:
     ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
     if pre_ind_sym != ind_sym:
         eq_sym = None
-        eq.range("I1:AD510").value = eq.range("D5:H30").value = None
+        eq.range("I1:AD40000").value = eq.range("D5:H30").value = None
         eq.range("E1").value = eq.range("G1").value = None
         eq.range("E3").value = eq.range("G2").value = None
         eq_row_number = 1
+        eq_df_flag = True
         eq_prev_time = eq_curr_time = None
-        #prev_time_1 = datetime.now()
+        eq_prev_time_1 = None
 
     if pre_eq_sym != eq_sym:
         eq.range("D5:H30").value = None
@@ -396,19 +424,32 @@ while True:
             eq_curr_time = eq.range("G1").value            
             #eq.range("G1").autofit()
 
+            eq_duration = None
+            if eq_prev_time_1 != None and eq_curr_time != None and eq_prev_time_1 != eq_curr_time:
+                eq_duration = eq_curr_time - eq_prev_time_1
+
+            # Printing for the first time
             if eq_row_number == 1 and eq_df_flag:
                 eq.range(f'I{eq_row_number}').value = eq_df
+                eq.range(f'AA{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
                 eq_df_flag = False
 
+            # Printing for next time and onwards
             if eq_prev_time != None and eq_prev_time != eq_curr_time:
                 eq_row_number += rows_eq_df
+                eq_row_number += 1
                 eq.range(f'I{eq_row_number}' + ':' + f'Z{eq_row_number}').color = COLOR_GREY               
                 eq.range(f'I{eq_row_number}').value = eq_df                            
                 eq.range(f'G{eq_row_number}').value = eq_curr_time
                 eq.range(f'G{eq_row_number}').font.bold = True
-                eq.range(f'I{eq_row_number}' + ':' + f'Z{eq_row_number}').font.bold = True
+                eq.range(f'I{eq_row_number}' + ':' + f'Z{eq_row_number}').font.bold = True            
+            if eq_duration is not None and eq_duration.total_seconds()/60 > DELIVERY_CHANGE_DURATION:
+                eq.range(f'AA{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
 
+            if eq_row_number == 1 or (eq_row_number > 1 and eq_duration is not None and eq_duration.total_seconds()/60 > DELIVERY_CHANGE_DURATION):
+                eq_prev_time_1 = eq_curr_time
             eq_prev_time = eq_curr_time
+
             data = None
             if eq_sym is not None:                
                 #try:
@@ -443,10 +484,8 @@ while True:
                     bid_df = pd.DataFrame(bid_list)
                     bid_df.rename(columns={"price":"Bid Price","quantity":"Bid Quantity"},inplace=True)
                     ask_df = pd.DataFrame(ask_list)
-                    ask_df.rename(columns={"price":"Ask Price","quantity":"Ask Quantity"},inplace=True)              
- 
+                    ask_df.rename(columns={"price":"Ask Price","quantity":"Ask Quantity"},inplace=True) 
                     bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
-
                     trd_df = pd.DataFrame(trd_data).transpose()
                     security_wise_dp_df = pd.DataFrame(security_wise_dp).transpose()
                     eq.range("D5").value = trd_df
@@ -462,8 +501,7 @@ while True:
                     eq.range("D28").value = "TotalBuyQty"
                     eq.range("E28").value = tot_buy
                     eq.range("F28").value = "TotalSellQty"
-                    eq.range("G28").value = tot_sell
-                    
+                    eq.range("G28").value = tot_sell                    
                 else:
                     logger.error(f'Error getting Equity Info for {eq_sym} - Equity Info Data is Null')
                     time.sleep(5)
