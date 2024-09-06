@@ -41,7 +41,7 @@ class NSE:
         try:
             response = self.session.get(f'https://www.nseindia.com/api/equity-stockindices?index={category}', headers=self.headers)
             response.raise_for_status()
-        except (requests.HTTPError, requests.exceptions.ConnectionError) as e:
+        except (requests.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
             logger.error(f'Function equity_market_data - Error - {e}')
             #logger.debug(f'HTTPStatus is - {HTTPStatus.description()}')
             #logger.debug(f'Exception Status code - {e.response.status_code()}')
@@ -74,7 +74,7 @@ class NSE:
         try:
             response = self.session.get("https://www.nseindia.com/api/quote-equity?symbol=" + symbol + ("&section=trade_info" if trade_info else ""), headers=self.headers)
             response.raise_for_status()
-        except (requests.HTTPError, requests.exceptions.ConnectionError) as e:
+        except (requests.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
             logger.error(f'Function equity_info - Error - {e}')
             return None
         if response.status_code != 401:
@@ -93,7 +93,7 @@ class NSE:
         try:
             response = self.session.get("https://www.nseindia.com/api/quote-derivative?symbol=" + symbol, headers=self.headers)
             response.raise_for_status()
-        except (requests.HTTPError, requests.exceptions.ConnectionError) as e:
+        except (requests.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
             logger.error(f'Function futures_data - Error - {e}')
             return None
         if response.status_code != 401:
@@ -112,7 +112,26 @@ class NSE:
                 return None
         else:
             return None
-    
+
+    def derivatives_data(self, symbol):
+        symbol = symbol.replace(' ', '%20').replace('&', '%26')
+        #data = self.session.get("https://www.nseindia.com/api/quote-derivative?symbol=" + symbol, headers=self.headers).json()
+        try:
+            response = self.session.get("https://www.nseindia.com/api/quote-derivative?symbol=" + symbol, headers=self.headers)
+            response.raise_for_status()
+        except (requests.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
+            logger.error(f'Function derivatives_data - Error - {e}')
+            return None
+        if response.status_code != 401:
+            try:
+                data = response.json()
+                return data
+            except (ValueError,KeyError) as e:
+                logger.error(f'Function  derivatives_data - Decoding JSON has failed - {e}')
+                return None
+        else:
+            return None
+
     def options_data(self, symbol, indices=False):
         symbol = symbol.replace(' ', '%20').replace('&', '%26')
         if not indices:
@@ -123,7 +142,7 @@ class NSE:
         try:
             response = self.session.get(url, headers=self.headers)
             response.raise_for_status()
-        except (requests.HTTPError, requests.exceptions.ConnectionError) as e:
+        except (requests.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
             logger.error(f'Function options_data - Error - {e}')
             return None        
         if response.status_code != 401:

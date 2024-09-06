@@ -16,7 +16,7 @@ import ctypes
 ####################### Initializing Logging End #######################
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '26/08/2024 00:00:00'
+    valid_from_str = '02/09/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
     #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
@@ -107,7 +107,11 @@ eq.range('H1').column_width = 2
 eq.range('H1:H510').color = COLOR_GREY
 fd.range('1:1').font.bold = True
 fd.range('1:1').color = COLOR_GREY
-logger.debug("Excel sheets initialized")
+fd.range('B1:C200').color = COLOR_GREY
+fd.range('B1').column_width = 1
+fd.range('C1').column_width = 1
+fd.range('H1').column_width = 2
+fd.range('H1:H1000').color = COLOR_GREY
 
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
@@ -124,6 +128,7 @@ oc.range('D3').font.bold = True
 oc.range("D2:E3").autofit()
 oc.range('A200:B200').color = COLOR_GREY
 oc.range('D20:F20').color = COLOR_GREY
+oc.range("D1").value = "Current Time"
 pre_oc_sym = pre_oc_exp = None
 exp_list = []
 logger.debug("OptionChain sheet initialized")
@@ -159,11 +164,17 @@ except Exception as e:
 fd_df = fd_df.set_index("FNO Symbol", drop=True)
 fd.range("A1").value = fd_df
 fd.range("A1:A200").autofit()
-fd.range("D2").value = "Enter Index/Equity ->"
+fd.range('A200:B200').color = COLOR_GREY
+fd.range("D1").value = "Current Time"
+fd.range("D1").autofit()
+fd.range("F1").value = "Underlying Value"
+fd.range("F1").autofit()
+fd.range("D2").value = "Enter Symbol ->"
 fd.range('D2').font.bold = True
 fd.range("D2").autofit()
 pre_fd_sym = None
 logger.debug("FuturesData sheet initialized")
+logger.debug("All Excel sheets initialized")
 
 ####################### Initializing Global Variables #######################
 row_number = 1
@@ -469,12 +480,17 @@ def create_price_vol_sheet(time, row_number_1, col_number_2):
 while True:
     time.sleep(1)
     ############################# OptionChain Starts #############################
-    oc_sym, oc_exp = oc.range("E2").value, oc.range("E3").value    
+    try:
+        oc_sym, oc_exp = oc.range("E2").value, oc.range("E3").value
+    except Exception as e:
+        logger.debug(f'Closing Excel and handling exception - {e}')
+        sys.exit()  
     if pre_oc_sym != oc_sym or pre_oc_exp != oc_exp:
         oc.range("G1:V4000").value = None
         if pre_oc_sym != oc_sym:
             oc.range("B:B").value = oc.range("D6:E19").value = None
             exp_list = []
+            oc_exp = None
         pre_oc_sym = oc_sym
         pre_oc_exp = oc_exp
     df = None  
@@ -504,7 +520,9 @@ while True:
         #    time.sleep(5)
         #    continue
         df = nse.options_data(oc_sym, indices)
+        logger.debug(f'Expiry date input is - {oc_exp}')
         if df is not None and oc_exp is not None:
+            logger.debug(f'DF is not none and Expiry date input is {oc_exp}')
             df["expiryDate"] = df["expiryDate"].apply(lambda x: dateutil.parser.parse(x))
             df = df[df["expiryDate"] == oc_exp]
             timestamp = list(df["timestamp"])[0]
@@ -545,7 +563,7 @@ while True:
                                     ["Max Put Change in OI Strike",
                                      list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
                                     ]
-            oc.range("D1").value = "Timestamp"
+            #oc.range("D1").value = "Timestamp"
             oc.range("E1").value = timestamp
             #oc.range("E6").autofit()
             oc.range("G1").value = df
@@ -559,7 +577,11 @@ while True:
     ####################### OptionChain Ends ###########################
 
     ####################### EquityData Starts ###########################
-    ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
+    try:
+        ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
+    except Exception as e:
+        logger.debug(f'Closing Excel and handling exception - {e}')
+        sys.exit()
     if pre_ind_sym != ind_sym:
         eq_sym = None
         eq.range("I1:AD510").value = eq.range("D5:H30").value = None
@@ -730,16 +752,38 @@ while True:
     ####################### EquityData Ends ###########################
 
     ####################### FuturesData Starts ###########################
-    fd_sym = fd.range("E2").value
+    try:
+        fd_sym = fd.range("E2").value
+    except Exception as e:
+        logger.debug(f'Closing Excel and handling exception - {e}')
+        sys.exit()
     if pre_fd_sym != fd_sym:
         fd.range("G1:AD100").value = None
         pre_fd_sym = fd_sym
-    fd_df = None
+    deriv_data = None
     if fd_sym is not None:
         indices = True if fd_sym == "NIFTY" or fd_sym == "BANKNIFTY" else False
-        fd_df = nse.futures_data(fd_sym, indices)
-        if fd_df is not None:
-            fd.range("G1").value = fd_df
+        #fd_df = nse.futures_data(fd_sym, indices)
+        deriv_data = nse.derivatives_data(fd_sym)
+        if deriv_data is not None:
+            meta_data_list = []
+            trd_info_list = []
+            for i in deriv_data["stocks"]:
+                if i["metadata"]["instrumentType"] == ("Index Futures" if indices else "Stock Futures"):
+                    meta_data_list.append(i["metadata"])
+                    trd_info_list.append(i["marketDeptOrderBook"]["tradeInfo"])
+
+            meta_data_df = pd.DataFrame(meta_data_list)
+            trd_info_df = pd.DataFrame(trd_info_list)
+            meta_data_df = meta_data_df.set_index("identifier", drop=True)
+            meta_data_df.drop(["optionType","strikePrice","closePrice"],axis=1,inplace=True)
+            fd.range("I1").value = meta_data_df
+            trd_info_df.drop(["tradedVolume","value","premiumTurnover","marketLot"],axis=1,inplace=True)
+            fd.range("U1").options(index=False).value = trd_info_df
+            deriv_timestamp = deriv_data["fut_timestamp"]
+            fd.range("E1").value = deriv_timestamp
+            deriv_underlying_value = deriv_data["underlyingValue"]
+            fd.range("G1").value = deriv_underlying_value
         else:
             logger.error(f'Error getting Futures Data - Futures DataFrame is Null')
             time.sleep(5)

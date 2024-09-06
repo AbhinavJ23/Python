@@ -19,7 +19,7 @@ from py_vollib.black_scholes.greeks.analytical import delta,gamma,rho,theta,vega
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '26/08/2024 00:00:00'
+    valid_from_str = '02/09/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
     #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
@@ -96,7 +96,11 @@ eq.range('H1').column_width = 2
 eq.range('H1:H40000').color = COLOR_GREY
 fd.range('1:1').font.bold = True
 fd.range('1:1').color = COLOR_GREY
-logger.debug("Excel sheets initialized")
+fd.range('B1:C200').color = COLOR_GREY
+fd.range('B1').column_width = 1
+fd.range('C1').column_width = 1
+fd.range('H1').column_width = 2
+fd.range('H1:H1000').color = COLOR_GREY
 
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
@@ -113,6 +117,7 @@ oc.range('D3').font.bold = True
 oc.range("D2:E3").autofit()
 oc.range('A200:B200').color = COLOR_GREY
 oc.range('D20:F20').color = COLOR_GREY
+oc.range("D1").value = "Current Time"
 pre_oc_sym = pre_oc_exp = None
 exp_list = []
 logger.debug("OptionChain sheet initialized")
@@ -148,20 +153,29 @@ except Exception as e:
 fd_df = fd_df.set_index("FNO Symbol", drop=True)
 fd.range("A1").value = fd_df
 fd.range("A1:A200").autofit()
-fd.range("D2").value = "Enter Index/Equity ->"
+fd.range('A200:B200').color = COLOR_GREY
+fd.range("D1").value = "Current Time"
+fd.range("D1").autofit()
+fd.range("F1").value = "Underlying Value"
+fd.range("F1").autofit()
+fd.range("D2").value = "Enter Symbol ->"
 fd.range('D2').font.bold = True
 fd.range("D2").autofit()
 pre_fd_sym = None
 logger.debug("FuturesData sheet initialized")
+logger.debug("All Excel sheets initialized")
 
 ####################### Initializing Global Variables #######################
 eq_row_number = 1
 oc_row_number = 1
+fd_row_number = 1
 eq_prev_time = eq_curr_time = None
 eq_prev_time_1 = None
 oc_prev_time = oc_curr_time = None
+fd_prev_time = fd_curr_time = None
 eq_df_flag = True
 oc_df_flag = True
+fd_df_flag = True
 
 ############################# Start - Function to get excel column(A1,B1 etc) given a positive number #############################
 alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -243,7 +257,11 @@ def get_delivery_info(df):
 while True:
     time.sleep(1)
     ############################# OptionChain Starts #############################
-    oc_sym, oc_exp = oc.range("E2").value, oc.range("E3").value    
+    try:
+        oc_sym, oc_exp = oc.range("E2").value, oc.range("E3").value
+    except Exception as e:
+        logger.debug(f'Closing Excel and handling exception - {e}')
+        sys.exit()
     if pre_oc_sym != oc_sym or pre_oc_exp != oc_exp:
         oc.range("G1:AD50000").value = None
         oc_row_number = 1
@@ -264,9 +282,9 @@ while True:
             for i in list(nse.options_data(oc_sym, indices)["expiryDate"]):
                 if dateutil.parser.parse(i).date() not in exp_list:
                     exp_list.append(dateutil.parser.parse(i).date())
+            if exp_list:
                 exp_df = pd.DataFrame({"Expiry Date": [str(i) for i in sorted(exp_list)]})
                 exp_df = exp_df.set_index("Expiry Date", drop=True)
-            if exp_list:
                 oc.range("B1").value = exp_df
                 oc.range("B1").autofit()
                 logger.debug('Options expiry list created')
@@ -343,25 +361,25 @@ while True:
                                     ["Max Put Change in OI Strike",
                                      list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
                                     ]
-            oc.range("D1").value = "Current Time"
+            #oc.range("D1").value = "Current Time"
             oc.range("E1").value = timestamp
             oc_curr_time = oc.range("E1").value
             #oc.range("E1").autofit()           
             #oc.range("G1").value = df
             if oc_row_number == 1 and oc_df_flag:
-                logger.debug(f'Printing the options expiry df for the first time at {oc_curr_time}')
+                logger.debug(f'Printing the options chain df for the first time at {oc_curr_time}')
                 oc.range("F1").value = timestamp
                 oc.range(f'G{oc_row_number}').value = df
                 oc_df_flag = False
 
-            duration = None
+            oc_duration = None
             if oc_prev_time != None and oc_curr_time != None and oc_prev_time != oc_curr_time:
-                duration = oc_curr_time - oc_prev_time
+                oc_duration = oc_curr_time - oc_prev_time
 
-            logger.debug(f'Previous time - {oc_prev_time}' + f',Current time - {oc_curr_time}' + f',Duration -  {duration}')            
+            logger.debug(f'Options : Previous time - {oc_prev_time}' + f',Current time - {oc_curr_time}' + f',Duration -  {oc_duration}')            
             #if oc_prev_time != None and oc_prev_time != oc_curr_time:                
-            if duration is not None and duration.total_seconds() > 0:
-                logger.debug(f'Printing the options expiry df for the next time at {oc_curr_time}')
+            if oc_duration is not None and oc_duration.total_seconds() > 0:
+                logger.debug(f'Printing the options chain df for the next time at {oc_curr_time}')
                 oc_row_number += rows_oc_df
                 oc_row_number += 1
                 oc.range(f'G{oc_row_number}' + ':' + f'AD{oc_row_number}').color = COLOR_GREY               
@@ -371,7 +389,7 @@ while True:
                 oc.range(f'F{oc_row_number}').font.bold = True
                 oc.range(f'G{oc_row_number}' + ':' + f'AD{oc_row_number}').font.bold = True
 
-            if oc_row_number == 1 or (oc_row_number > 1 and duration is not None and duration.total_seconds() > 0):
+            if oc_row_number == 1 or (oc_row_number > 1 and oc_duration is not None and oc_duration.total_seconds() > 0):
                 oc_prev_time = oc_curr_time
         else:
             logger.error(f'Error getting Options Data - Either Options DataFrame is Null or Expiry date is not entered')
@@ -383,7 +401,11 @@ while True:
     ####################### OptionChain Ends ###########################
 
     ####################### EquityData Starts ###########################
-    ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
+    try:
+        ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
+    except Exception as e:
+        logger.debug(f'Closing Excel and handling exception - {e}')
+        sys.exit()
     if pre_ind_sym != ind_sym:
         eq_sym = None
         eq.range("I1:AD40000").value = eq.range("D5:H30").value = None
@@ -428,21 +450,21 @@ while True:
             if eq_prev_time_1 != None and eq_curr_time != None and eq_prev_time_1 != eq_curr_time:
                 eq_duration = eq_curr_time - eq_prev_time_1
 
-            # Printing for the first time
             if eq_row_number == 1 and eq_df_flag:
+                logger.debug(f'Printing the Equity df for the first time at {eq_curr_time}')
                 eq.range(f'I{eq_row_number}').value = eq_df
                 eq.range(f'AA{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
                 eq_df_flag = False
 
-            # Printing for next time and onwards
             if eq_prev_time != None and eq_prev_time != eq_curr_time:
+                logger.debug(f'Printing the Equity df for the next time at {eq_curr_time}')
                 eq_row_number += rows_eq_df
                 eq_row_number += 1
-                eq.range(f'I{eq_row_number}' + ':' + f'Z{eq_row_number}').color = COLOR_GREY               
+                eq.range(f'I{eq_row_number}' + ':' + f'AD{eq_row_number}').color = COLOR_GREY               
                 eq.range(f'I{eq_row_number}').value = eq_df                            
                 eq.range(f'G{eq_row_number}').value = eq_curr_time
                 eq.range(f'G{eq_row_number}').font.bold = True
-                eq.range(f'I{eq_row_number}' + ':' + f'Z{eq_row_number}').font.bold = True            
+                eq.range(f'I{eq_row_number}' + ':' + f'AD{eq_row_number}').font.bold = True           
             if eq_duration is not None and eq_duration.total_seconds()/60 > DELIVERY_CHANGE_DURATION:
                 eq.range(f'AA{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
 
@@ -517,16 +539,65 @@ while True:
     ####################### EquityData Ends ###########################
 
     ####################### FuturesData Starts ###########################
-    fd_sym = fd.range("E2").value
+    try:
+        fd_sym = fd.range("E2").value
+    except Exception as e:
+        logger.debug(f'Closing Excel and handling exception - {e}')
+        sys.exit()
     if pre_fd_sym != fd_sym:
         fd.range("G1:AD100").value = None
         pre_fd_sym = fd_sym
-    fd_df = None
+    deriv_data = None
     if fd_sym is not None:
         indices = True if fd_sym == "NIFTY" or fd_sym == "BANKNIFTY" else False
-        fd_df = nse.futures_data(fd_sym, indices)
-        if fd_df is not None:
-            fd.range("G1").value = fd_df
+        #fd_df = nse.futures_data(fd_sym, indices)
+        deriv_data = nse.derivatives_data(fd_sym)
+        if deriv_data is not None:
+            meta_data_list = []
+            trd_info_list = []
+            for i in deriv_data["stocks"]:
+                if i["metadata"]["instrumentType"] == ("Index Futures" if indices else "Stock Futures"):
+                    meta_data_list.append(i["metadata"])
+                    trd_info_list.append(i["marketDeptOrderBook"]["tradeInfo"])
+
+            meta_data_df = pd.DataFrame(meta_data_list)
+            trd_info_df = pd.DataFrame(trd_info_list)
+            meta_data_df = meta_data_df.set_index("identifier", drop=True)
+            meta_data_df.drop(["optionType","strikePrice","closePrice"],axis=1,inplace=True)
+            rows_fd_df = len(meta_data_df.index)
+            #fd.range("I1").value = meta_data_df
+            trd_info_df.drop(["tradedVolume","value","premiumTurnover","marketLot"],axis=1,inplace=True)
+            #fd.range("U1").options(index=False).value = trd_info_df
+            deriv_timestamp = deriv_data["fut_timestamp"]
+            fd.range("E1").value = deriv_timestamp
+            fd_curr_time = fd.range("E1").value
+            deriv_underlying_value = deriv_data["underlyingValue"]
+            fd.range("G1").value = deriv_underlying_value
+
+            if fd_row_number == 1 and fd_df_flag:
+                logger.debug(f'Printing the futures df for the first time at {fd_curr_time}')
+                fd.range(f'I{fd_row_number}').value = meta_data_df
+                fd.range(f'U{fd_row_number}').options(index=False).value = trd_info_df
+                fd_df_flag = False
+
+            fd_duration = None
+            if fd_prev_time != None and fd_curr_time != None and fd_prev_time != fd_curr_time:
+                fd_duration = fd_curr_time - fd_prev_time
+
+            logger.debug(f'Futures : Previous time - {fd_prev_time}' + f',Current time - {fd_curr_time}' + f',Duration -  {fd_duration}')        
+            if fd_duration is not None and fd_duration.total_seconds() > 0:
+                logger.debug(f'Printing the futures df for the next time at {fd_curr_time}')
+                fd_row_number += rows_fd_df
+                fd_row_number += 1
+                fd.range(f'I{fd_row_number}' + ':' + f'X{fd_row_number}').color = COLOR_GREY               
+                fd.range(f'I{fd_row_number}').value = meta_data_df
+                fd.range(f'U{fd_row_number}').options(index=False).value = trd_info_df                            
+                fd.range(f'G{fd_row_number}').value = fd_curr_time
+                fd.range(f'G{fd_row_number}').font.bold = True
+                fd.range(f'G{fd_row_number}' + ':' + f'X{fd_row_number}').font.bold = True
+
+            if fd_row_number == 1 or (fd_row_number > 1 and fd_duration is not None and fd_duration.total_seconds() > 0):
+                fd_prev_time = fd_curr_time
         else:
             logger.error(f'Error getting Futures Data - Futures DataFrame is Null')
             time.sleep(5)
