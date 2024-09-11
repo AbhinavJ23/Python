@@ -19,7 +19,7 @@ from py_vollib.black_scholes.greeks.analytical import delta,gamma,rho,theta,vega
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '02/09/2024 00:00:00'
+    valid_from_str = '09/09/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
     #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
@@ -248,9 +248,14 @@ def get_delivery_info(df):
         else:
             delivery_info_list.append({"quantityTraded": 'NA', "deliveryQuantity": 'NA', "deliveryToTradedQuantity": 'NA'})
     
-    delivery_info_df = pd.DataFrame(delivery_info_list, index=df.index)
-    delivery_info_df.drop(["seriesRemarks","secWiseDelPosDate"],axis=1,inplace=True)
-    return delivery_info_df
+    if len(delivery_info_list) == len(df.index):
+        delivery_info_df = pd.DataFrame(delivery_info_list, index=df.index)
+        delivery_info_df.drop(["seriesRemarks","secWiseDelPosDate"],axis=1,inplace=True)
+        return delivery_info_df
+    else:
+        empty_df = pd.DataFrame(index=df.index, columns=['quantityTraded','deliveryQuantity','deliveryToTradedQuantity'])
+        empty_df.fillna(0)
+        return empty_df
 
 ############################# End - Function to get delivery info #############################
 
@@ -594,7 +599,7 @@ while True:
                 fd.range(f'U{fd_row_number}').options(index=False).value = trd_info_df                            
                 fd.range(f'G{fd_row_number}').value = fd_curr_time
                 fd.range(f'G{fd_row_number}').font.bold = True
-                fd.range(f'G{fd_row_number}' + ':' + f'X{fd_row_number}').font.bold = True
+                fd.range(f'I{fd_row_number}' + ':' + f'X{fd_row_number}').font.bold = True
 
             if fd_row_number == 1 or (fd_row_number > 1 and fd_duration is not None and fd_duration.total_seconds() > 0):
                 fd_prev_time = fd_curr_time

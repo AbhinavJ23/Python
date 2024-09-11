@@ -1,5 +1,6 @@
 from NseIndia import NSE
 import os,sys,time
+from sys import platform
 import pandas as pd
 import xlwings as xw
 import dateutil.parser
@@ -16,7 +17,7 @@ import ctypes
 ####################### Initializing Logging End #######################
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '02/09/2024 00:00:00'
+    valid_from_str = '09/09/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
     #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
@@ -29,7 +30,14 @@ def check_validity():
     total_seconds = time_left.total_seconds()
     logger.debug(f'Total Seconds Left - {total_seconds}')
     if total_seconds < 0:
-        ctypes.windll.user32.MessageBoxW(0, "Your product trial period has expired!", "Error",0)
+        if platform == "win32":
+            ctypes.windll.user32.MessageBoxW(0, "Your product trial period has expired!", "Error",0)
+        elif platform == "darwin":
+            command_str = "osascript -e 'Tell application \"System Events\" to display dialog \"Your product trial period has expired!\" with title \"Error\"'"
+            os.system(command_str)
+        elif platform == "linux":
+            logger.debug("Expiry error message not implemented for Linux yet")
+
         return False
     else:    
         #hours = round((total_seconds - time_left.days*24*60*60)/3600)
@@ -39,7 +47,14 @@ def check_validity():
         minutes = int((total_seconds - time_left.days*24*60*60 - hours*60*60)//60)
         seconds = round(total_seconds - time_left.days*24*60*60 - hours*60*60 - minutes*60)
         message = "Your product trial period will expire in " + str(time_left.days) + " day(s) " + str(hours) +" hours(s) " + str(minutes) + " min(s) and " + str(seconds) + " second(s)"
-        ctypes.windll.user32.MessageBoxW(0, message, "Warning",0)
+        if platform == "win32":
+            ctypes.windll.user32.MessageBoxW(0, message, "Warning",0)
+        elif platform == "darwin":
+            command_str = "osascript -e 'Tell application \"System Events\" to display dialog \""+message+"\" with title \"Warning\"'"
+            os.system(command_str)
+        elif platform == "linux":
+            logger.debug("Expiry warning message not implemented for Linux yet")
+
         return True
 ############################# End - Function to check validity,expiry #############################
 
@@ -84,12 +99,14 @@ COLOR_GREY = (211, 211, 211)
 COLOR_GREEN = (0, 255, 0)
 COLOR_RED = (255, 0, 0)
 COLOR_YELLOW = (255, 255, 0)
+COLOR_CYAN = (0, 255, 255)
 MAX_VOLUME_PERCENT_DIFF = 500
 MAX_TURNOVER_PERCENT_DIFF = 500
 MAX_TURNOVER_VALUE_DIFF = 50000000
 ONE_CRORE = 10000000
-CUMULATIVE_TURNOVER_DURATION = 15
+CUMULATIVE_TURNOVER_DURATION = 15 #Mins
 CUMULATIVE_TURNOVER = 250000000
+MARKET_OPEN_DURATION = 375 #Mins
 
 ####################### Initializing Excel Sheets #######################
 oc.range('1:1').font.bold = True
@@ -181,7 +198,7 @@ row_number = 1
 row_number_1 = 2
 col_number = 2
 col_number_1 = 1
-col_number_2 = 2
+#col_number_2 = 2
 prev_time = curr_time = None
 prev_time_1 = datetime.now()
 prev_vol = curr_vol = []
@@ -409,28 +426,47 @@ def create_max_sheet(sh_type,time,duration,row_number,col_number_1,vol_list,turn
 ############################# End - Function to print max volume and max turnover ############
 
 ############################# Start - Function to compare Cumulative Price, Volume difference after every set duration ############
-############################# Also print the direction (Up,Down) and probable signal                                   ############
-def create_price_vol_sheet(time, row_number_1, col_number_2):
+############################# Also print the direction (Up,Down) for each stock #########################################
+def create_price_vol_sheet(time, row_number_1):
     logger.debug(f'Printing PriceVolumeDirection Sheet for {time} and row {row_number_1}')
     logger.debug(f'prev_cum_price_diff_dict - {prev_cum_price_diff_dict} and prev_cum_vol_diff_dict - {prev_cum_vol_diff_dict}')
     logger.debug(f'cum_price_diff_dict - {cum_price_diff_dict} and cum_vol_diff_dict - {cum_vol_diff_dict}')
     col_number_2 = 2
+    price_vol_up_list = []
+    temp_col_number = row_number_1 + int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 3
+    if row_number_1 == 2:
+        #pv.range('1:1').font.bold = True
+        pv.range(f'A{temp_col_number-2}' + ':' + f'DZ{temp_col_number-2}').color = COLOR_GREY
+        pv.range(f'A{row_number_1}').value = time
+        pv.range(f'A{row_number_1}').font.bold = True
+        pv.range(f'A{temp_col_number}').value = "Price Up,Volume Up"
+        #pv.range(f'A{temp_col_number}').font.bold = True
+    else:
+        pv.range(f'A{row_number_1}').value = time.strftime('%H:%M:%S')
+        pv.range(f'A{row_number_1}').font.bold = True
+        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_col_number)).value = time.strftime('%H:%M:%S')
+        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_col_number)).font.bold = True
+        pv.range(f'A{temp_col_number}').value = time.strftime('%H:%M:%S')
+
+    pv.range(f'A{temp_col_number}').font.bold = True
+
     for key in cum_price_diff_dict:
         if row_number_1 == 2:       
             ## Initializing the stock names and columns
             pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1-1)).value = key
             pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1-1)).autofit()
+            pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1-1)).font.bold = True
             pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Price"
             pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).font.bold = True
             pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Volume"
             pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).font.bold = True
-            pv.range('1:1').font.bold = True
-            pv.range(f'A{row_number_1}').value = time
-            pv.range(f'A{row_number_1}').font.bold = True
+            #pv.range('1:1').font.bold = True
+            #pv.range(f'A{row_number_1}').value = time
+            #pv.range(f'A{row_number_1}').font.bold = True            
         else:
             ## Check difference between previous cumulative(price,volume) and current cumulative(price,volume)
-            pv.range(f'A{row_number_1}').value = time.strftime('%H:%M:%S')
-            pv.range(f'A{row_number_1}').font.bold = True
+            #pv.range(f'A{row_number_1}').value = time.strftime('%H:%M:%S')
+            #pv.range(f'A{row_number_1}').font.bold = True
             if (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) == 0:
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Neutral"
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_YELLOW
@@ -464,9 +500,12 @@ def create_price_vol_sheet(time, row_number_1, col_number_2):
                 pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_GREEN
             elif (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) > 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) > 0:
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Up"
-                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_GREEN
+                pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_CYAN
                 pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Up"
-                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_GREEN
+                pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_CYAN
+                #Building Data for Price Up, Volume Up
+                price_vol_up_list.append(key)
+
             elif (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) > 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) < 0:
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Up"
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_GREEN
@@ -475,6 +514,15 @@ def create_price_vol_sheet(time, row_number_1, col_number_2):
             else:
                 logger.debug("Scenario not handled")
         col_number_2 += 2
+
+    #Printing Data for Price Up, Volume Up
+    if row_number_1 > 2:
+        pv.range(f'B{temp_col_number}').value = price_vol_up_list
+        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_col_number+1)).value = price_vol_up_list
+        #price_vol_up_df = pd.DataFrame(price_vol_up_list)
+        #pv.range(f'B{row_number_1 + int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 3}').options(index=False).value = price_vol_up_df.transpose()
+        #pv.range(f'B{row_number_1 + int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 3}').options(pd.DataFrame, index=False).value = price_vol_up_df.transpose()
+
 ############################# End - Function to compare Cumulative Price, Volume difference after every set duration ############ 
 
 while True:
@@ -596,7 +644,7 @@ while True:
         col_number = 2
         row_number_1 = 2
         col_number_1 = 1
-        col_number_2 = 2
+        #col_number_2 = 2
         prev_time = curr_time = None
         prev_time_1 = datetime.now()
         prev_vol = curr_vol = []
@@ -717,7 +765,7 @@ while True:
                     col_number_1 += 2
                     prev_time_1 = curr_time
                     cum_turn_dict = {}
-                    create_price_vol_sheet(curr_time, row_number_1, col_number_2)
+                    create_price_vol_sheet(curr_time, row_number_1)
                     prev_cum_price_diff_dict = cum_price_diff_dict
                     cum_price_diff_dict = {}
                     prev_cum_vol_diff_dict = cum_vol_diff_dict
