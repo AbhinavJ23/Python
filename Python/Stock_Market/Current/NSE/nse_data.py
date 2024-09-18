@@ -17,12 +17,12 @@ import ctypes
 ####################### Initializing Logging End #######################
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '09/09/2024 00:00:00'
+    valid_from_str = '16/09/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
     #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
     #valid_till_str = '17/08/2024 22:30:30'   
-    valid_till_time = valid_from_time + timedelta(days=5)
+    valid_till_time = valid_from_time + timedelta(days=7)
     time_now = datetime.now()
     time_left = valid_till_time - time_now
     logger.debug(f'Time Left - {time_left}')
@@ -104,8 +104,8 @@ MAX_VOLUME_PERCENT_DIFF = 500
 MAX_TURNOVER_PERCENT_DIFF = 500
 MAX_TURNOVER_VALUE_DIFF = 50000000
 ONE_CRORE = 10000000
-CUMULATIVE_TURNOVER_DURATION = 15 #Mins
-CUMULATIVE_TURNOVER = 250000000
+CUMULATIVE_TURNOVER_DURATION = 5 #Mins
+CUMULATIVE_TURNOVER = 100000000
 MARKET_OPEN_DURATION = 375 #Mins
 
 ####################### Initializing Excel Sheets #######################
@@ -132,12 +132,20 @@ fd.range('H1:H1000').color = COLOR_GREY
 
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
-try:    
-    oc_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
-except Exception as e:
-    logger.critical(f'Error getting FNO symbols for Options Data - {e}')
-oc_df = oc_df.set_index("FNO Symbol", drop=True)
-oc.range("A1").value = oc_df
+oc_df = None
+#try:    
+oc_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
+#except Exception as e:
+    #logger.critical(f'Error getting FNO symbols for Options Data - {e}')
+if oc_df is not None:
+    oc_df = oc_df.set_index("FNO Symbol", drop=True)
+    oc.range("A1").value = oc_df
+else:
+    logger.error(f'Error getting FNO symbols dataframe for Options Data')
+    time.sleep(5)
+    logger.debug("Trying to connect again...")
+    nse = NSE()
+
 oc.range("A1:A200").autofit()
 oc.range("D2").value, oc.range("D3").value = "Enter Symbol ->", "Enter Expiry ->"
 oc.range('D2').font.bold = True
@@ -174,12 +182,20 @@ logger.debug("EquityData sheet initialized")
 
 ####################### Initializing FuturesData sheet #######################
 fd.range("A:A").value = fd.range("G1:AD100").value = None
-try:
-    fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
-except Exception as e:
-    logger.critical(f'Error getting FNO symbols for Futures Data - {e}')
-fd_df = fd_df.set_index("FNO Symbol", drop=True)
-fd.range("A1").value = fd_df
+fd_df = None
+#try:
+fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
+#except Exception as e:
+    #logger.critical(f'Error getting FNO symbols for Futures Data - {e}')
+if fd_df is not None:
+    fd_df = fd_df.set_index("FNO Symbol", drop=True)
+    fd.range("A1").value = fd_df
+else:
+    logger.error(f'Error getting FNO symbols dataframe for Futures Data')
+    time.sleep(5)
+    logger.debug("Trying to connect again...")
+    nse = NSE()
+
 fd.range("A1:A200").autofit()
 fd.range('A200:B200').color = COLOR_GREY
 fd.range("D1").value = "Current Time"
@@ -594,27 +610,31 @@ while True:
             df["Strike"] = df.index
             df.index = [np.nan] * len(df)
 
-            #oc.range("D6").value = [["Timestamp", timestamp],
-            oc.range("D6").value = [["Spot LTP", underlying_value],
-                                    ["Total Call OI", sum(list(df["CE OI"]))],
-                                    ["Total Put OI", sum(list(df["PE OI"]))],
-                                    ["",""],
-                                    ["Max Call OI", max(list(df["CE OI"]))],
-                                    ["Max Put OI", max(list(df["PE OI"]))],
-                                    ["Max Call OI Strike", list(df[df["CE OI"] == max(list(df["CE OI"]))]["Strike"])[0]],
-                                    ["Max Put OI Strike", list(df[df["PE OI"] == max(list(df["PE OI"]))]["Strike"])[0]],
-                                    ["",""],
-                                    ["Max Call Change in OI", max(list(df["CE Change in OI"]))],
-                                    ["Max Put Change in OI", max(list(df["PE Change in OI"]))],
-                                    ["Max Call Change in OI Strike",
-                                     list(df[df["CE Change in OI"] == max(list(df["CE Change in OI"]))]["Strike"])[0]],
-                                    ["Max Put Change in OI Strike",
-                                     list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
-                                    ]
-            #oc.range("D1").value = "Timestamp"
-            oc.range("E1").value = timestamp
-            #oc.range("E6").autofit()
-            oc.range("G1").value = df
+            try:
+                #oc.range("D6").value = [["Timestamp", timestamp],
+                oc.range("D6").value = [["Spot LTP", underlying_value],
+                                        ["Total Call OI", sum(list(df["CE OI"]))],
+                                        ["Total Put OI", sum(list(df["PE OI"]))],
+                                        ["",""],
+                                        ["Max Call OI", max(list(df["CE OI"]))],
+                                        ["Max Put OI", max(list(df["PE OI"]))],
+                                        ["Max Call OI Strike", list(df[df["CE OI"] == max(list(df["CE OI"]))]["Strike"])[0]],
+                                        ["Max Put OI Strike", list(df[df["PE OI"] == max(list(df["PE OI"]))]["Strike"])[0]],
+                                        ["",""],
+                                        ["Max Call Change in OI", max(list(df["CE Change in OI"]))],
+                                        ["Max Put Change in OI", max(list(df["PE Change in OI"]))],
+                                        ["Max Call Change in OI Strike",
+                                        list(df[df["CE Change in OI"] == max(list(df["CE Change in OI"]))]["Strike"])[0]],
+                                        ["Max Put Change in OI Strike",
+                                        list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
+                                        ]
+                #oc.range("D1").value = "Timestamp"
+                oc.range("E1").value = timestamp
+                #oc.range("E6").autofit()
+                oc.range("G1").value = df
+            except Exception as e:
+                logger.error(f'Error printing values - {e}')
+                continue
         else:
             logger.error(f'Error getting Options Data - Either Options DataFrame is Null or Expiry date is not entered')
             if df is None:
@@ -682,12 +702,17 @@ while True:
             sorted_idx = eq_df.index.sort_values()
             eq_df = eq_df.loc[sorted_idx]
             rows_eq_df = len(eq_df.index)
-            eq.range("I1").value = eq_df
-            eq.range("E1").value = eq_df.loc[ind_sym,'lastUpdateTime']
-            eq.range("G2").value = eq_df.loc[ind_sym,'lastPrice']
-            eq.range("G1").value = eq_df.iloc[0]['lastUpdateTime']
-            curr_time = eq.range("G1").value
-            #eq.range("G1").autofit()
+            try:
+                eq.range("I1").value = eq_df
+                eq.range("E1").value = eq_df.loc[ind_sym,'lastUpdateTime']
+                eq.range("G2").value = eq_df.loc[ind_sym,'lastPrice']
+                eq.range("G1").value = eq_df.iloc[0]['lastUpdateTime']
+                curr_time = eq.range("G1").value
+                #eq.range("G1").autofit()
+            except Exception as e:
+                logger.error(f'Error printing values - {e}')
+                continue
+
             data = None
             if eq_sym is not None:                
                 #try:
@@ -724,17 +749,21 @@ while True:
                     bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
 
                     trd_df = pd.DataFrame(trd_data).transpose()
-                    eq.range("D5").value = trd_df
-                    eq.range("E5").value = None
-                    eq.range("F6").value = "Lakhs"
-                    eq.range("F7").value = "₹ Cr"
-                    eq.range("F8").value = "₹ Cr"
-                    eq.range("F9").value = "₹ Cr"
-                    eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
-                    eq.range("D22").value = "TotalBuyQty"
-                    eq.range("E22").value = tot_buy
-                    eq.range("F22").value = "TotalSellQty"
-                    eq.range("G22").value = tot_sell
+                    try:
+                        eq.range("D5").value = trd_df
+                        eq.range("E5").value = None
+                        eq.range("F6").value = "Lakhs"
+                        eq.range("F7").value = "₹ Cr"
+                        eq.range("F8").value = "₹ Cr"
+                        eq.range("F9").value = "₹ Cr"
+                        eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
+                        eq.range("D22").value = "TotalBuyQty"
+                        eq.range("E22").value = tot_buy
+                        eq.range("F22").value = "TotalSellQty"
+                        eq.range("G22").value = tot_sell
+                    except Exception as e:
+                        logger.error(f'Error printing trading info df - {e}')
+                        continue
                 else:
                     logger.error(f'Error getting Equity Info for {eq_sym} - Equity Info Data is Null')
                     time.sleep(5)
@@ -825,13 +854,17 @@ while True:
             trd_info_df = pd.DataFrame(trd_info_list)
             meta_data_df = meta_data_df.set_index("identifier", drop=True)
             meta_data_df.drop(["optionType","strikePrice","closePrice"],axis=1,inplace=True)
-            fd.range("I1").value = meta_data_df
-            trd_info_df.drop(["tradedVolume","value","premiumTurnover","marketLot"],axis=1,inplace=True)
-            fd.range("U1").options(index=False).value = trd_info_df
-            deriv_timestamp = deriv_data["fut_timestamp"]
-            fd.range("E1").value = deriv_timestamp
-            deriv_underlying_value = deriv_data["underlyingValue"]
-            fd.range("G1").value = deriv_underlying_value
+            try:
+                fd.range("I1").value = meta_data_df
+                trd_info_df.drop(["tradedVolume","value","premiumTurnover","marketLot"],axis=1,inplace=True)
+                fd.range("U1").options(index=False).value = trd_info_df
+                deriv_timestamp = deriv_data["fut_timestamp"]
+                fd.range("E1").value = deriv_timestamp
+                deriv_underlying_value = deriv_data["underlyingValue"]
+                fd.range("G1").value = deriv_underlying_value
+            except Exception as e:
+                logger.error(f'Error printing futures df - {e}')
+                continue
         else:
             logger.error(f'Error getting Futures Data - Futures DataFrame is Null')
             time.sleep(5)

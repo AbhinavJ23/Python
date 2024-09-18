@@ -19,12 +19,12 @@ from py_vollib.black_scholes.greeks.analytical import delta,gamma,rho,theta,vega
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '09/09/2024 00:00:00'
+    valid_from_str = '16/09/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
     #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
     #valid_till_str = '17/08/2024 22:30:30'   
-    valid_till_time = valid_from_time + timedelta(days=5)
+    valid_till_time = valid_from_time + timedelta(days=7)
     time_now = datetime.now()
     time_left = valid_till_time - time_now
     logger.debug(f'Time Left - {time_left}')
@@ -104,12 +104,20 @@ fd.range('H1:H1000').color = COLOR_GREY
 
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
-try:    
-    oc_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
-except Exception as e:
-    logger.critical(f'Error getting FNO symbols for Options Data - {e}')
-oc_df = oc_df.set_index("FNO Symbol", drop=True)
-oc.range("A1").value = oc_df
+oc_df = None
+#try:    
+oc_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
+#except Exception as e:
+    #logger.critical(f'Error getting FNO symbols for Options Data - {e}')
+if oc_df is not None:
+    oc_df = oc_df.set_index("FNO Symbol", drop=True)
+    oc.range("A1").value = oc_df
+else:
+    logger.error(f'Error getting FNO symbols dataframe for Options Data')
+    time.sleep(5)
+    logger.debug("Trying to connect again...")
+    nse = NSE()
+
 oc.range("A1:A200").autofit()
 oc.range("D2").value, oc.range("D3").value = "Enter Symbol ->", "Enter Expiry ->"
 oc.range('D2').font.bold = True
@@ -146,12 +154,20 @@ logger.debug("EquityData sheet initialized")
 
 ####################### Initializing FuturesData sheet #######################
 fd.range("A:A").value = fd.range("G1:AD100").value = None
-try:
-    fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
-except Exception as e:
-    logger.critical(f'Error getting FNO symbols for Futures Data - {e}')
-fd_df = fd_df.set_index("FNO Symbol", drop=True)
-fd.range("A1").value = fd_df
+fd_df = None
+#try:
+fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
+#except Exception as e:
+    #logger.critical(f'Error getting FNO symbols for Futures Data - {e}')
+if fd_df is not None:
+    fd_df = fd_df.set_index("FNO Symbol", drop=True)
+    fd.range("A1").value = fd_df
+else:
+    logger.error(f'Error getting FNO symbols dataframe for Futures Data')
+    time.sleep(5)
+    logger.debug("Trying to connect again...")
+    nse = NSE()
+
 fd.range("A1:A200").autofit()
 fd.range('A200:B200').color = COLOR_GREY
 fd.range("D1").value = "Current Time"
@@ -232,8 +248,10 @@ def get_option_greeks(df, call_or_put, expiry):
 ############################# Start - Function to get delivery info ###########################
 def get_delivery_info(df):
     delivery_info_list = []
+    flag = True
     for i in df.index:
         symbol = i
+        data = None
         if symbol != 'NIFTY 50':
             data = nse.equity_info(symbol, trade_info=True)
             if data is not None:
@@ -242,13 +260,20 @@ def get_delivery_info(df):
                         delivery_info_list.append(value)
             else:
                 logger.error(f'Error getting Delivery Info for {symbol} - Delivery Info Data is Null')
-                empty_df = pd.DataFrame(index=df.index, columns=['quantityTraded','deliveryQuantity','deliveryToTradedQuantity'])
-                empty_df.fillna(0)
-                return empty_df
+                flag = False
+                break
+                #delivery_info_list.append({"quantityTraded": 'Error', "deliveryQuantity": 'Error', "deliveryToTradedQuantity": 'Error'})
+                #time.sleep(5)
+                #logger.debug("Trying to connect again...")
+                #nse = NSE()
+                #continue  
+                #empty_df = pd.DataFrame(index=df.index, columns=['quantityTraded','deliveryQuantity','deliveryToTradedQuantity'])
+                #empty_df.fillna(0)
+                #return empty_df
         else:
             delivery_info_list.append({"quantityTraded": 'NA', "deliveryQuantity": 'NA', "deliveryToTradedQuantity": 'NA'})
     
-    if len(delivery_info_list) == len(df.index):
+    if len(delivery_info_list) == len(df.index) and flag:
         delivery_info_df = pd.DataFrame(delivery_info_list, index=df.index)
         delivery_info_df.drop(["seriesRemarks","secWiseDelPosDate"],axis=1,inplace=True)
         return delivery_info_df
@@ -350,31 +375,39 @@ while True:
             df.index = [np.nan] * len(df)
             rows_oc_df = len(df.index)
             #oc.range("D6").value = [["Timestamp", timestamp],
-            oc.range("D6").value = [["Spot LTP", underlying_value],
-                                    ["Total Call OI", sum(list(df["CE OI"]))],
-                                    ["Total Put OI", sum(list(df["PE OI"]))],
-                                    ["",""],
-                                    ["Max Call OI", max(list(df["CE OI"]))],
-                                    ["Max Put OI", max(list(df["PE OI"]))],
-                                    ["Max Call OI Strike", list(df[df["CE OI"] == max(list(df["CE OI"]))]["Strike"])[0]],
-                                    ["Max Put OI Strike", list(df[df["PE OI"] == max(list(df["PE OI"]))]["Strike"])[0]],
-                                    ["",""],
-                                    ["Max Call Change in OI", max(list(df["CE Change in OI"]))],
-                                    ["Max Put Change in OI", max(list(df["PE Change in OI"]))],
-                                    ["Max Call Change in OI Strike",
-                                     list(df[df["CE Change in OI"] == max(list(df["CE Change in OI"]))]["Strike"])[0]],
-                                    ["Max Put Change in OI Strike",
-                                     list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
-                                    ]
-            #oc.range("D1").value = "Current Time"
-            oc.range("E1").value = timestamp
-            oc_curr_time = oc.range("E1").value
-            #oc.range("E1").autofit()           
-            #oc.range("G1").value = df
+            try:
+                oc.range("D6").value = [["Spot LTP", underlying_value],
+                                        ["Total Call OI", sum(list(df["CE OI"]))],
+                                        ["Total Put OI", sum(list(df["PE OI"]))],
+                                        ["",""],
+                                        ["Max Call OI", max(list(df["CE OI"]))],
+                                        ["Max Put OI", max(list(df["PE OI"]))],
+                                        ["Max Call OI Strike", list(df[df["CE OI"] == max(list(df["CE OI"]))]["Strike"])[0]],
+                                        ["Max Put OI Strike", list(df[df["PE OI"] == max(list(df["PE OI"]))]["Strike"])[0]],
+                                        ["",""],
+                                        ["Max Call Change in OI", max(list(df["CE Change in OI"]))],
+                                        ["Max Put Change in OI", max(list(df["PE Change in OI"]))],
+                                        ["Max Call Change in OI Strike",
+                                        list(df[df["CE Change in OI"] == max(list(df["CE Change in OI"]))]["Strike"])[0]],
+                                        ["Max Put Change in OI Strike",
+                                        list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
+                                        ]
+                #oc.range("D1").value = "Current Time"
+                oc.range("E1").value = timestamp
+                oc_curr_time = oc.range("E1").value
+                #oc.range("E1").autofit()           
+                #oc.range("G1").value = df
+            except Exception as e:
+                logger.error(f'Error printing values - {e}')
+                continue           
             if oc_row_number == 1 and oc_df_flag:
                 logger.debug(f'Printing the options chain df for the first time at {oc_curr_time}')
-                oc.range("F1").value = timestamp
-                oc.range(f'G{oc_row_number}').value = df
+                try:
+                    oc.range("F1").value = timestamp
+                    oc.range(f'G{oc_row_number}').value = df
+                except Exception as e:
+                    logger.error(f'Error printing options chain df - {e}')
+                    continue
                 oc_df_flag = False
 
             oc_duration = None
@@ -387,12 +420,16 @@ while True:
                 logger.debug(f'Printing the options chain df for the next time at {oc_curr_time}')
                 oc_row_number += rows_oc_df
                 oc_row_number += 1
-                oc.range(f'G{oc_row_number}' + ':' + f'AD{oc_row_number}').color = COLOR_GREY               
-                oc.range(f'G{oc_row_number}').value = df                            
-                oc.range(f'F{oc_row_number}').value = oc_curr_time
-                #oc.range(f'F{oc_row_number}').autofit()
-                oc.range(f'F{oc_row_number}').font.bold = True
-                oc.range(f'G{oc_row_number}' + ':' + f'AD{oc_row_number}').font.bold = True
+                try:
+                    oc.range(f'G{oc_row_number}' + ':' + f'AD{oc_row_number}').color = COLOR_GREY               
+                    oc.range(f'G{oc_row_number}').value = df                            
+                    oc.range(f'F{oc_row_number}').value = oc_curr_time
+                    #oc.range(f'F{oc_row_number}').autofit()
+                    oc.range(f'F{oc_row_number}').font.bold = True
+                    oc.range(f'G{oc_row_number}' + ':' + f'AD{oc_row_number}').font.bold = True
+                except Exception as e:
+                    logger.error(f'Error printing options chain df - {e}')
+                    continue
 
             if oc_row_number == 1 or (oc_row_number > 1 and oc_duration is not None and oc_duration.total_seconds() > 0):
                 oc_prev_time = oc_curr_time
@@ -444,12 +481,16 @@ while True:
             sorted_idx = eq_df.index.sort_values()
             eq_df = eq_df.loc[sorted_idx]
             rows_eq_df = len(eq_df.index)
-            #eq.range("I1").value = eq_df       
-            eq.range("E1").value = eq_df.loc[ind_sym,'lastUpdateTime']
-            eq.range("G2").value = eq_df.loc[ind_sym,'lastPrice']            
-            eq.range("G1").value = eq_df.iloc[0]['lastUpdateTime']
-            eq_curr_time = eq.range("G1").value            
-            #eq.range("G1").autofit()
+            #eq.range("I1").value = eq_df
+            try:
+                eq.range("E1").value = eq_df.loc[ind_sym,'lastUpdateTime']
+                eq.range("G2").value = eq_df.loc[ind_sym,'lastPrice']            
+                eq.range("G1").value = eq_df.iloc[0]['lastUpdateTime']
+                eq_curr_time = eq.range("G1").value            
+                #eq.range("G1").autofit()
+            except Exception as e:
+                logger.error(f'Error printing values - {e}')
+                continue
 
             eq_duration = None
             if eq_prev_time_1 != None and eq_curr_time != None and eq_prev_time_1 != eq_curr_time:
@@ -457,21 +498,33 @@ while True:
 
             if eq_row_number == 1 and eq_df_flag:
                 logger.debug(f'Printing the Equity df for the first time at {eq_curr_time}')
-                eq.range(f'I{eq_row_number}').value = eq_df
-                eq.range(f'AA{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
+                try:
+                    eq.range(f'I{eq_row_number}').value = eq_df
+                    eq.range(f'AA{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
+                except Exception as e:
+                    logger.error(f'Error printing equity df - {e}')
+                    continue
                 eq_df_flag = False
 
             if eq_prev_time != None and eq_prev_time != eq_curr_time:
                 logger.debug(f'Printing the Equity df for the next time at {eq_curr_time}')
                 eq_row_number += rows_eq_df
                 eq_row_number += 1
-                eq.range(f'I{eq_row_number}' + ':' + f'AD{eq_row_number}').color = COLOR_GREY               
-                eq.range(f'I{eq_row_number}').value = eq_df                            
-                eq.range(f'G{eq_row_number}').value = eq_curr_time
-                eq.range(f'G{eq_row_number}').font.bold = True
-                eq.range(f'I{eq_row_number}' + ':' + f'AD{eq_row_number}').font.bold = True           
+                try:
+                    eq.range(f'I{eq_row_number}' + ':' + f'AD{eq_row_number}').color = COLOR_GREY               
+                    eq.range(f'I{eq_row_number}').value = eq_df                            
+                    eq.range(f'G{eq_row_number}').value = eq_curr_time
+                    eq.range(f'G{eq_row_number}').font.bold = True
+                    eq.range(f'I{eq_row_number}' + ':' + f'AD{eq_row_number}').font.bold = True
+                except Exception as e:
+                    logger.error(f'Error printing equity df - {e}')
+                    continue        
             if eq_duration is not None and eq_duration.total_seconds()/60 > DELIVERY_CHANGE_DURATION:
-                eq.range(f'AA{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
+                try:
+                    eq.range(f'AA{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
+                except Exception as e:
+                    logger.error(f'Error printing delivery info df - {e}')
+                    continue
 
             if eq_row_number == 1 or (eq_row_number > 1 and eq_duration is not None and eq_duration.total_seconds()/60 > DELIVERY_CHANGE_DURATION):
                 eq_prev_time_1 = eq_curr_time
@@ -515,20 +568,24 @@ while True:
                     bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
                     trd_df = pd.DataFrame(trd_data).transpose()
                     security_wise_dp_df = pd.DataFrame(security_wise_dp).transpose()
-                    eq.range("D5").value = trd_df
-                    eq.range("E5").value = None
-                    eq.range("F6").value = "Lakhs"
-                    eq.range("F7").value = "₹ Cr"
-                    eq.range("F8").value = "₹ Cr"
-                    eq.range("F9").value = "₹ Cr"
-                    eq.range("D15").value = security_wise_dp_df
-                    eq.range("E15").value = None
-                    eq.range("F18").value = "%"               
-                    eq.range("D22").options(pd.DataFrame, index=False).value = bid_ask_df
-                    eq.range("D28").value = "TotalBuyQty"
-                    eq.range("E28").value = tot_buy
-                    eq.range("F28").value = "TotalSellQty"
-                    eq.range("G28").value = tot_sell                    
+                    try:
+                        eq.range("D5").value = trd_df
+                        eq.range("E5").value = None
+                        eq.range("F6").value = "Lakhs"
+                        eq.range("F7").value = "₹ Cr"
+                        eq.range("F8").value = "₹ Cr"
+                        eq.range("F9").value = "₹ Cr"
+                        eq.range("D15").value = security_wise_dp_df
+                        eq.range("E15").value = None
+                        eq.range("F18").value = "%"               
+                        eq.range("D22").options(pd.DataFrame, index=False).value = bid_ask_df
+                        eq.range("D28").value = "TotalBuyQty"
+                        eq.range("E28").value = tot_buy
+                        eq.range("F28").value = "TotalSellQty"
+                        eq.range("G28").value = tot_sell
+                    except Exception as e:
+                        logger.error(f'Error printing trading info df - {e}')
+                        continue                 
                 else:
                     logger.error(f'Error getting Equity Info for {eq_sym} - Equity Info Data is Null')
                     time.sleep(5)
@@ -574,15 +631,23 @@ while True:
             trd_info_df.drop(["tradedVolume","value","premiumTurnover","marketLot"],axis=1,inplace=True)
             #fd.range("U1").options(index=False).value = trd_info_df
             deriv_timestamp = deriv_data["fut_timestamp"]
-            fd.range("E1").value = deriv_timestamp
-            fd_curr_time = fd.range("E1").value
-            deriv_underlying_value = deriv_data["underlyingValue"]
-            fd.range("G1").value = deriv_underlying_value
+            try:
+                fd.range("E1").value = deriv_timestamp
+                fd_curr_time = fd.range("E1").value
+                deriv_underlying_value = deriv_data["underlyingValue"]
+                fd.range("G1").value = deriv_underlying_value
+            except Exception as e:
+                    logger.error(f'Error printing values - {e}')
+                    continue
 
             if fd_row_number == 1 and fd_df_flag:
                 logger.debug(f'Printing the futures df for the first time at {fd_curr_time}')
-                fd.range(f'I{fd_row_number}').value = meta_data_df
-                fd.range(f'U{fd_row_number}').options(index=False).value = trd_info_df
+                try:
+                    fd.range(f'I{fd_row_number}').value = meta_data_df
+                    fd.range(f'U{fd_row_number}').options(index=False).value = trd_info_df
+                except Exception as e:
+                    logger.error(f'Error printing futures df - {e}')
+                    continue
                 fd_df_flag = False
 
             fd_duration = None
@@ -594,12 +659,16 @@ while True:
                 logger.debug(f'Printing the futures df for the next time at {fd_curr_time}')
                 fd_row_number += rows_fd_df
                 fd_row_number += 1
-                fd.range(f'I{fd_row_number}' + ':' + f'X{fd_row_number}').color = COLOR_GREY               
-                fd.range(f'I{fd_row_number}').value = meta_data_df
-                fd.range(f'U{fd_row_number}').options(index=False).value = trd_info_df                            
-                fd.range(f'G{fd_row_number}').value = fd_curr_time
-                fd.range(f'G{fd_row_number}').font.bold = True
-                fd.range(f'I{fd_row_number}' + ':' + f'X{fd_row_number}').font.bold = True
+                try:
+                    fd.range(f'I{fd_row_number}' + ':' + f'X{fd_row_number}').color = COLOR_GREY               
+                    fd.range(f'I{fd_row_number}').value = meta_data_df
+                    fd.range(f'U{fd_row_number}').options(index=False).value = trd_info_df                            
+                    fd.range(f'G{fd_row_number}').value = fd_curr_time
+                    fd.range(f'G{fd_row_number}').font.bold = True
+                    fd.range(f'I{fd_row_number}' + ':' + f'X{fd_row_number}').font.bold = True
+                except Exception as e:
+                    logger.error(f'Error printing futures df - {e}')
+                    continue
 
             if fd_row_number == 1 or (fd_row_number > 1 and fd_duration is not None and fd_duration.total_seconds() > 0):
                 fd_prev_time = fd_curr_time
