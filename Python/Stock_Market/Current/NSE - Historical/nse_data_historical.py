@@ -19,7 +19,7 @@ from py_vollib.black_scholes.greeks.analytical import delta,gamma,rho,theta,vega
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '16/09/2024 00:00:00'
+    valid_from_str = '23/09/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
     #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)

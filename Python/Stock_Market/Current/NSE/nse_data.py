@@ -17,7 +17,7 @@ import ctypes
 ####################### Initializing Logging End #######################
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '16/09/2024 00:00:00'
+    valid_from_str = '23/09/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
     #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
@@ -77,6 +77,7 @@ if not os.path.exists(file_name):
         wb.sheets.add("FuturesData")
         wb.sheets.add("EquityData")
         wb.sheets.add("OptionChain")
+        wb.sheets.add("Configuration")
         wb.save(file_name)
         #wb.close()
         logger.debug("Created Excel - " + file_name)
@@ -85,6 +86,7 @@ if not os.path.exists(file_name):
         sys.exit()
 
 wb = xw.Book(file_name)
+cfg = wb.sheets("Configuration")
 oc = wb.sheets("OptionChain")
 eq = wb.sheets("EquityData")
 fd = wb.sheets("FuturesData")
@@ -129,6 +131,27 @@ fd.range('B1').column_width = 1
 fd.range('C1').column_width = 1
 fd.range('H1').column_width = 2
 fd.range('H1:H1000').color = COLOR_GREY
+
+######################### Initializing Configuration sheet #######################
+cfg.range('D1').value = "Important! Before giving values in other sheets, use this sheet to check configurations. Add/Modify if required."
+cfg.range('D1').font.bold = True
+cfg.range('A1:Z1').color = COLOR_GREY
+cfg.range('A3').value = "Cumulative Turnover"
+cfg.range('A3').font.bold = True
+cfg.range('B3').value = CUMULATIVE_TURNOVER/ONE_CRORE
+cfg.range('C3').value = "₹ Cr"
+cfg.range('A4').value = "Cumulative Turnover Duration"
+cfg.range('A4').font.bold = True
+cfg.range('B4').value = CUMULATIVE_TURNOVER_DURATION
+cfg.range('C4').value = "Mins"
+cfg.range('A5:Z5').color = COLOR_GREY
+cfg.range('A6').value = "Stock List"
+cfg.range('A6').font.bold = True
+cfg.range('A7').value = "Support"
+cfg.range('A7').font.bold = True
+cfg.range('A8').value = "Resistance"
+cfg.range('A8').font.bold = True
+logger.debug("Configurations sheet initialized")
 
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
@@ -246,6 +269,28 @@ def get_col_name(num):
         else:
             return get_col_name(q) + alpha[r-1]
 ############################# End - Function to get excel column(A1,B1 etc) given a positive integer #############################
+
+############################# Start - Function to get Equity Config DataFrame #############################
+def get_equity_config_df():
+    stocks_res_sup_df = None
+    logger.debug("Getting Equity Config DataFrame")
+    config_stock_list = cfg.range('B6:Z6').value
+    config_support_list = cfg.range('B7:Z7').value
+    config_resistance_list = cfg.range('B8:Z8').value
+    if config_stock_list:
+        while None in config_stock_list:
+            config_stock_list.remove(None)
+    if config_stock_list and config_support_list and config_resistance_list:
+        len_config_stock_list = len(config_stock_list)        
+        config_support_list = config_support_list[0:len_config_stock_list]        
+        config_resistance_list = config_resistance_list[0:len_config_stock_list]        
+        logger.debug(f'Config stock list - {config_stock_list}')
+        logger.debug(f'Config support list - {config_support_list}')
+        logger.debug(f'Config resistance list - {config_resistance_list}')
+        stocks_res_sup_df = pd.DataFrame(list(zip(config_support_list, config_resistance_list)), index=config_stock_list, columns = ['Support','Resistance'])
+        logger.debug(f'Printing stocks df - {stocks_res_sup_df}')
+    return stocks_res_sup_df
+############################# End - Function to get Equity Config DataFrame #############################
 
 ############################# Start - Function to create Spot sheets #############################
 def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,prev_spot_diff,curr_spot_diff,col_number_1,stock_list):
@@ -443,28 +488,34 @@ def create_max_sheet(sh_type,time,duration,row_number,col_number_1,vol_list,turn
 
 ############################# Start - Function to compare Cumulative Price, Volume difference after every set duration ############
 ############################# Also print the direction (Up,Down) for each stock #########################################
-def create_price_vol_sheet(time, row_number_1):
+def create_price_vol_sheet(df, time, row_number_1):
     logger.debug(f'Printing PriceVolumeDirection Sheet for {time} and row {row_number_1}')
     logger.debug(f'prev_cum_price_diff_dict - {prev_cum_price_diff_dict} and prev_cum_vol_diff_dict - {prev_cum_vol_diff_dict}')
     logger.debug(f'cum_price_diff_dict - {cum_price_diff_dict} and cum_vol_diff_dict - {cum_vol_diff_dict}')
     col_number_2 = 2
     price_vol_up_list = []
-    temp_col_number = row_number_1 + int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 3
+    #filtered_list = []
+    row_difference = int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 2
+    temp_row_number = row_number_1 + row_difference
     if row_number_1 == 2:
         #pv.range('1:1').font.bold = True
-        pv.range(f'A{temp_col_number-2}' + ':' + f'DZ{temp_col_number-2}').color = COLOR_GREY
+        pv.range(f'A{temp_row_number}' + ':' + f'DZ{temp_row_number}').color = COLOR_GREY
+        pv.range(f'A{temp_row_number + row_difference}' + ':' + f'DZ{temp_row_number + row_difference}').color = COLOR_GREY
         pv.range(f'A{row_number_1}').value = time
         pv.range(f'A{row_number_1}').font.bold = True
-        pv.range(f'A{temp_col_number}').value = "Price Up,Volume Up"
-        #pv.range(f'A{temp_col_number}').font.bold = True
+        pv.range(f'A{temp_row_number+1}').value = "Price Up,Volume Up"
+        pv.range(f'A{temp_row_number + row_difference+1}').value = "Filtered Stocks"
+        #pv.range(f'A{temp_row_number}').font.bold = True
     else:
-        pv.range(f'A{row_number_1}').value = time.strftime('%H:%M:%S')
-        pv.range(f'A{row_number_1}').font.bold = True
-        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_col_number)).value = time.strftime('%H:%M:%S')
-        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_col_number)).font.bold = True
-        pv.range(f'A{temp_col_number}').value = time.strftime('%H:%M:%S')
+        pv.range(f'A{row_number_1 + 1}').value = time.strftime('%H:%M:%S')
+        pv.range(f'A{row_number_1 + 1}').font.bold = True
+        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_row_number)).value = time.strftime('%H:%M:%S')
+        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_row_number)).font.bold = True
+        pv.range(f'A{temp_row_number + 1}').value = time.strftime('%H:%M:%S')
+        pv.range(f'A{temp_row_number + row_difference + 1}').value = time.strftime('%H:%M:%S')
 
-    pv.range(f'A{temp_col_number}').font.bold = True
+    pv.range(f'A{temp_row_number}').font.bold = True
+    pv.range(f'A{temp_row_number + row_difference}').font.bold = True
 
     for key in cum_price_diff_dict:
         if row_number_1 == 2:       
@@ -531,10 +582,33 @@ def create_price_vol_sheet(time, row_number_1):
                 logger.debug("Scenario not handled")
         col_number_2 += 2
 
-    #Printing Data for Price Up, Volume Up
+    #Printing Stocks for which Price and Volume are Up, along with subsequent filtering as per Support and Resistance.
     if row_number_1 > 2:
-        pv.range(f'B{temp_col_number}').value = price_vol_up_list
-        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_col_number+1)).value = price_vol_up_list
+        pv.range(f'B{temp_row_number}').value = price_vol_up_list
+        temp_df = get_equity_config_df()
+        temp_col_number = 2
+        if temp_df is not None:
+            for idx in temp_df.index:
+                if idx in price_vol_up_list:
+                    logger.debug(f'Configured Equity {idx} is in Price Up,Volume Up list')
+                    pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference)).value = idx
+                    if eq_df.loc[idx, 'lastPrice'] >= temp_df.loc[idx, 'Resistance']:
+                        logger.debug("Equity price is greater than or equal to configured Resistance")
+                        pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference)).color = COLOR_GREEN
+                        #pv.range(f'B{temp_row_number + row_difference }').value = idx
+                        #pv.range(f'B{temp_row_number + row_difference }').color = COLOR_GREEN
+                        #filtered_list.append(idx)
+                    elif eq_df.loc[idx, 'lastPrice'] <= temp_df.loc[idx, 'Support']:
+                        logger.debug("Configured Equity price is less than or equal to configured Support")
+                        pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference)).color = COLOR_RED
+                    else:
+                        logger.debug("Configured Equity price is with-in Resistance and Support")
+                        pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference)).color = COLOR_YELLOW
+                    temp_col_number += 1
+        else:
+            logger.debug("Function create_price_vol_sheet, Equity Config df is None")
+
+        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_row_number+1)).value = price_vol_up_list
         #price_vol_up_df = pd.DataFrame(price_vol_up_list)
         #pv.range(f'B{row_number_1 + int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 3}').options(index=False).value = price_vol_up_df.transpose()
         #pv.range(f'B{row_number_1 + int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 3}').options(pd.DataFrame, index=False).value = price_vol_up_df.transpose()
@@ -647,6 +721,11 @@ while True:
     ####################### EquityData Starts ###########################
     try:
         ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
+        CUMULATIVE_TURNOVER = cfg.range('B3').value
+        CUMULATIVE_TURNOVER = CUMULATIVE_TURNOVER*ONE_CRORE
+        CUMULATIVE_TURNOVER_DURATION = cfg.range('B4').value
+        #logger.debug(f'CUMULATIVE TURNOVER - {CUMULATIVE_TURNOVER}')
+        #logger.debug(f'CUMULATIVE TURNOVER DURATION - {CUMULATIVE_TURNOVER_DURATION}')
     except Exception as e:
         logger.debug(f'Closing Excel and handling exception - {e}')
         sys.exit()
@@ -794,7 +873,7 @@ while True:
                     col_number_1 += 2
                     prev_time_1 = curr_time
                     cum_turn_dict = {}
-                    create_price_vol_sheet(curr_time, row_number_1)
+                    create_price_vol_sheet(eq_df, curr_time, row_number_1)
                     prev_cum_price_diff_dict = cum_price_diff_dict
                     cum_price_diff_dict = {}
                     prev_cum_vol_diff_dict = cum_vol_diff_dict
