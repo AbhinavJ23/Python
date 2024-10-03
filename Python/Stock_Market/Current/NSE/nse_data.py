@@ -6,22 +6,15 @@ import xlwings as xw
 import dateutil.parser
 import numpy as np
 import time
-#import logging
 from datetime import datetime, timedelta
 from base_logger import logger
 import ctypes
+from py_vollib.black_scholes.greeks.analytical import delta,gamma,rho,theta,vega
 
-####################### Initializing Logging Start #######################
-#logging.basicConfig(filename='Nse_Data_'+time.strftime('%Y%m%d%H%M%S')+'.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-#logger = logging.getLogger()
-####################### Initializing Logging End #######################
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '23/09/2024 00:00:00'
-    valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
-    #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
-    #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
-    #valid_till_str = '17/08/2024 22:30:30'   
+    valid_from_str = '30/09/2024 00:00:00'
+    valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S') 
     valid_till_time = valid_from_time + timedelta(days=7)
     time_now = datetime.now()
     time_left = valid_till_time - time_now
@@ -31,29 +24,26 @@ def check_validity():
     logger.debug(f'Total Seconds Left - {total_seconds}')
     if total_seconds < 0:
         if platform == "win32":
-            ctypes.windll.user32.MessageBoxW(0, "Your product trial period has expired!", "Error",0)
+            ctypes.windll.user32.MessageBoxW(0, "Your product usage period has ended!", "Error",0)
         elif platform == "darwin":
-            command_str = "osascript -e 'Tell application \"System Events\" to display dialog \"Your product trial period has expired!\" with title \"Error\"'"
+            command_str = "osascript -e 'Tell application \"System Events\" to display dialog \"Your product usage period has ended!\" with title \"Error\"'"
             os.system(command_str)
         elif platform == "linux":
-            logger.debug("Expiry error message not implemented for Linux yet")
+            logger.debug("Usage period error message not implemented for Linux yet")
 
         return False
     else:    
-        #hours = round((total_seconds - time_left.days*24*60*60)/3600)
-        #minutes = round((total_seconds // 60) % 60)
-        #seconds = round(total_seconds % 60)
         hours = int((total_seconds - time_left.days*24*60*60)//3600)
         minutes = int((total_seconds - time_left.days*24*60*60 - hours*60*60)//60)
         seconds = round(total_seconds - time_left.days*24*60*60 - hours*60*60 - minutes*60)
-        message = "Your product trial period will expire in " + str(time_left.days) + " day(s) " + str(hours) +" hours(s) " + str(minutes) + " min(s) and " + str(seconds) + " second(s)"
+        message = "Your product usage period will expire in " + str(time_left.days) + " day(s) " + str(hours) +" hours(s) " + str(minutes) + " min(s) and " + str(seconds) + " second(s)"
         if platform == "win32":
             ctypes.windll.user32.MessageBoxW(0, message, "Warning",0)
         elif platform == "darwin":
             command_str = "osascript -e 'Tell application \"System Events\" to display dialog \""+message+"\" with title \"Warning\"'"
             os.system(command_str)
         elif platform == "linux":
-            logger.debug("Expiry warning message not implemented for Linux yet")
+            logger.debug("Usage period warning message not implemented for Linux yet")
 
         return True
 ############################# End - Function to check validity,expiry #############################
@@ -79,7 +69,6 @@ if not os.path.exists(file_name):
         wb.sheets.add("OptionChain")
         wb.sheets.add("Configuration")
         wb.save(file_name)
-        #wb.close()
         logger.debug("Created Excel - " + file_name)
     except Exception as e:
         logger.critical(f'Error Creating Excel - {e}')
@@ -109,6 +98,8 @@ ONE_CRORE = 10000000
 CUMULATIVE_TURNOVER_DURATION = 5 #Mins
 CUMULATIVE_TURNOVER = 100000000
 MARKET_OPEN_DURATION = 375 #Mins
+RISK_FREE_INT_RATE = 0.05
+DELIVERY_CHANGE_DURATION = 60
 
 ####################### Initializing Excel Sheets #######################
 oc.range('1:1').font.bold = True
@@ -133,18 +124,19 @@ fd.range('H1').column_width = 2
 fd.range('H1:H1000').color = COLOR_GREY
 
 ######################### Initializing Configuration sheet #######################
-cfg.range('D1').value = "Important! Before giving values in other sheets, use this sheet to check configurations. Add/Modify if required."
+cfg.range('D1').value = "IMPORTANT! BEFORE GIVING VALUES IN OTHER SHEETS, USE THIS SHEET TO CHECK CONFIGURATIONS. ADD/MODIFY IF REQUIRED."
 cfg.range('D1').font.bold = True
-cfg.range('A1:Z1').color = COLOR_GREY
+cfg.range('A1:CZ1').color = COLOR_GREY
 cfg.range('A3').value = "Cumulative Turnover"
 cfg.range('A3').font.bold = True
 cfg.range('B3').value = CUMULATIVE_TURNOVER/ONE_CRORE
 cfg.range('C3').value = "₹ Cr"
 cfg.range('A4').value = "Cumulative Turnover Duration"
 cfg.range('A4').font.bold = True
+cfg.range("A4").autofit()
 cfg.range('B4').value = CUMULATIVE_TURNOVER_DURATION
 cfg.range('C4').value = "Mins"
-cfg.range('A5:Z5').color = COLOR_GREY
+cfg.range('A5:CZ5').color = COLOR_GREY
 cfg.range('A6').value = "Stock List"
 cfg.range('A6').font.bold = True
 cfg.range('A7').value = "Support"
@@ -156,10 +148,7 @@ logger.debug("Configurations sheet initialized")
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
 oc_df = None
-#try:    
 oc_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
-#except Exception as e:
-    #logger.critical(f'Error getting FNO symbols for Options Data - {e}')
 if oc_df is not None:
     oc_df = oc_df.set_index("FNO Symbol", drop=True)
     oc.range("A1").value = oc_df
@@ -182,7 +171,7 @@ exp_list = []
 logger.debug("OptionChain sheet initialized")
 
 ######################### Initializing EquityData sheet #######################
-eq.range("A:A").value = eq.range("D5:H30").value = eq.range("I1:AD510").value = None
+eq.range("A:A").value = eq.range("D5:H30").value = eq.range("I1:AE510").value = None
 eq_df = pd.DataFrame({"Index Symbol":nse.equity_market_categories})
 eq_df = eq_df.set_index("Index Symbol", drop=True)
 eq.range("A1").value = eq_df
@@ -206,10 +195,7 @@ logger.debug("EquityData sheet initialized")
 ####################### Initializing FuturesData sheet #######################
 fd.range("A:A").value = fd.range("G1:AD100").value = None
 fd_df = None
-#try:
 fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
-#except Exception as e:
-    #logger.critical(f'Error getting FNO symbols for Futures Data - {e}')
 if fd_df is not None:
     fd_df = fd_df.set_index("FNO Symbol", drop=True)
     fd.range("A1").value = fd_df
@@ -237,9 +223,9 @@ row_number = 1
 row_number_1 = 2
 col_number = 2
 col_number_1 = 1
-#col_number_2 = 2
 prev_time = curr_time = None
 prev_time_1 = datetime.now()
+prev_time_2 = None
 prev_vol = curr_vol = []
 prev_vol_diff = curr_vol_diff = []
 prev_price = curr_price = []
@@ -270,13 +256,78 @@ def get_col_name(num):
             return get_col_name(q) + alpha[r-1]
 ############################# End - Function to get excel column(A1,B1 etc) given a positive integer #############################
 
+############################# Start - Function to get option greeks #############################
+def get_option_greeks(df, call_or_put, expiry):
+    time = ((datetime(expiry.year, expiry.month, expiry.day, 15, 30) - datetime.now()) / timedelta(days=1)) / 365
+    logger.debug (f'Time to Expiry in Years - {time}')
+    int_rate = RISK_FREE_INT_RATE
+    greek_list = []
+    try:
+        for i, row in df.iterrows():
+            strike = i            
+            if call_or_put == 'c':
+                last_price = row['CE LTP']
+                imp_vol = row['CE IV']
+            elif call_or_put == 'p':
+                last_price = row['PE LTP']
+                imp_vol = row['PE IV']
+            if last_price <= 0 or imp_vol <= 0:
+                 greek_list.append({"Delta": 0, "Gamma": 0, "Theta": 0, "Vega": 0, "Rho": 0})
+            else:
+                Delta = delta(call_or_put, last_price, strike, time, int_rate, imp_vol)
+                Gamma = gamma(call_or_put, last_price, strike, time, int_rate, imp_vol)
+                Theta = theta(call_or_put, last_price, strike, time, int_rate, imp_vol)
+                Vega = vega(call_or_put, last_price, strike, time, int_rate, imp_vol)
+                Rho = rho(call_or_put, last_price, strike, time, int_rate, imp_vol)
+                greek_list.append({"Delta": Delta, "Gamma": Gamma, "Theta": Theta, "Vega": Vega, "Rho": Rho})
+    except Exception as e:
+        logger.error(f'Error getting Option Greeks - {e}')
+        empty_df = pd.DataFrame(index=df.index, columns=['Delta','Gamma','Theta','Vega','Rho'])
+        empty_df.fillna(0)
+        return empty_df
+    
+    greek_df = pd.DataFrame(greek_list, index=df.index)
+    return greek_df
+############################# End - Function to get option greeks #############################
+
+############################# Start - Function to get delivery info ###########################
+def get_delivery_info(df):
+    delivery_info_list = []
+    flag = True
+    for i in df.index:
+        symbol = i
+        data = None
+        if symbol != 'NIFTY 50':
+            data = nse.equity_info(symbol, trade_info=True)
+            if data is not None:
+                for key,value in data.items():              
+                    if str(key) == "securityWiseDP":
+                        delivery_info_list.append(value)
+            else:
+                logger.error(f'Error getting Delivery Info for {symbol} - Delivery Info Data is Null')
+                flag = False
+                break
+        else:
+            delivery_info_list.append({"quantityTraded": 'NA', "deliveryQuantity": 'NA', "deliveryToTradedQuantity": 'NA', "secWiseDelPosDate": 'NA'})
+    
+    if len(delivery_info_list) == len(df.index) and flag:
+        delivery_info_df = pd.DataFrame(delivery_info_list, index=df.index)
+        delivery_info_df.drop(["seriesRemarks"],axis=1,inplace=True)
+        return delivery_info_df
+    else:
+        empty_df = pd.DataFrame(index=df.index, columns=['quantityTraded','deliveryQuantity','deliveryToTradedQuantity','secWiseDelPosDate'])
+        empty_df.fillna(0)
+        return empty_df
+
+############################# End - Function to get delivery info #############################
+
 ############################# Start - Function to get Equity Config DataFrame #############################
 def get_equity_config_df():
     stocks_res_sup_df = None
     logger.debug("Getting Equity Config DataFrame")
-    config_stock_list = cfg.range('B6:Z6').value
-    config_support_list = cfg.range('B7:Z7').value
-    config_resistance_list = cfg.range('B8:Z8').value
+    config_stock_list = cfg.range('B6:CZ6').value
+    config_support_list = cfg.range('B7:CZ7').value
+    config_resistance_list = cfg.range('B8:CZ8').value
     if config_stock_list:
         while None in config_stock_list:
             config_stock_list.remove(None)
@@ -309,7 +360,6 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
 
     if row_number == 1:
         sh.range("A1:ZZ1").color = COLOR_GREY        
-    #sh.range(f'A{row_number + 1}').font.bold = True
     
     spot_df1 = spot_df.transpose()
     col_number = 2
@@ -330,8 +380,6 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
             sh.range(f'{get_col_name(col_number+1)}' + str(row_number)).value = "Difference"
             if sh_type in ("Volume","Turnover"):
                 sh.range(f'{get_col_name(col_number+2)}' + str(row_number)).value = "% Change"
-            #sh.range('1:1').font.bold = True
-            #sh.range("A1:ZZ1").autofit()
             if iter == 0:
                 sh.range(f'A{row_number + 1}').value = time
                 sh.range(f'A{row_number + 1}').font.bold = True
@@ -494,28 +542,23 @@ def create_price_vol_sheet(df, time, row_number_1):
     logger.debug(f'cum_price_diff_dict - {cum_price_diff_dict} and cum_vol_diff_dict - {cum_vol_diff_dict}')
     col_number_2 = 2
     price_vol_up_list = []
-    #filtered_list = []
     row_difference = int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 2
     temp_row_number = row_number_1 + row_difference
     if row_number_1 == 2:
-        #pv.range('1:1').font.bold = True
         pv.range(f'A{temp_row_number}' + ':' + f'DZ{temp_row_number}').color = COLOR_GREY
         pv.range(f'A{temp_row_number + row_difference}' + ':' + f'DZ{temp_row_number + row_difference}').color = COLOR_GREY
         pv.range(f'A{row_number_1}').value = time
         pv.range(f'A{row_number_1}').font.bold = True
         pv.range(f'A{temp_row_number+1}').value = "Price Up,Volume Up"
         pv.range(f'A{temp_row_number + row_difference+1}').value = "Filtered Stocks"
-        #pv.range(f'A{temp_row_number}').font.bold = True
     else:
-        pv.range(f'A{row_number_1 + 1}').value = time.strftime('%H:%M:%S')
-        pv.range(f'A{row_number_1 + 1}').font.bold = True
-        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_row_number)).value = time.strftime('%H:%M:%S')
-        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_row_number)).font.bold = True
+        pv.range(f'A{row_number_1}').value = time.strftime('%H:%M:%S')
+        pv.range(f'A{row_number_1}').font.bold = True
         pv.range(f'A{temp_row_number + 1}').value = time.strftime('%H:%M:%S')
         pv.range(f'A{temp_row_number + row_difference + 1}').value = time.strftime('%H:%M:%S')
 
-    pv.range(f'A{temp_row_number}').font.bold = True
-    pv.range(f'A{temp_row_number + row_difference}').font.bold = True
+    pv.range(f'A{temp_row_number + 1}').font.bold = True
+    pv.range(f'A{temp_row_number + row_difference + 1}').font.bold = True
 
     for key in cum_price_diff_dict:
         if row_number_1 == 2:       
@@ -526,14 +569,9 @@ def create_price_vol_sheet(df, time, row_number_1):
             pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Price"
             pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).font.bold = True
             pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Volume"
-            pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).font.bold = True
-            #pv.range('1:1').font.bold = True
-            #pv.range(f'A{row_number_1}').value = time
-            #pv.range(f'A{row_number_1}').font.bold = True            
+            pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).font.bold = True         
         else:
             ## Check difference between previous cumulative(price,volume) and current cumulative(price,volume)
-            #pv.range(f'A{row_number_1}').value = time.strftime('%H:%M:%S')
-            #pv.range(f'A{row_number_1}').font.bold = True
             if (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) == 0:
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Neutral"
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_YELLOW
@@ -584,34 +622,26 @@ def create_price_vol_sheet(df, time, row_number_1):
 
     #Printing Stocks for which Price and Volume are Up, along with subsequent filtering as per Support and Resistance.
     if row_number_1 > 2:
-        pv.range(f'B{temp_row_number}').value = price_vol_up_list
+        pv.range(f'B{temp_row_number + 1}').value = price_vol_up_list
         temp_df = get_equity_config_df()
         temp_col_number = 2
         if temp_df is not None:
             for idx in temp_df.index:
                 if idx in price_vol_up_list:
                     logger.debug(f'Configured Equity {idx} is in Price Up,Volume Up list')
-                    pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference)).value = idx
+                    pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference + 1)).value = idx
                     if eq_df.loc[idx, 'lastPrice'] >= temp_df.loc[idx, 'Resistance']:
                         logger.debug("Equity price is greater than or equal to configured Resistance")
-                        pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference)).color = COLOR_GREEN
-                        #pv.range(f'B{temp_row_number + row_difference }').value = idx
-                        #pv.range(f'B{temp_row_number + row_difference }').color = COLOR_GREEN
-                        #filtered_list.append(idx)
+                        pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference + 1)).color = COLOR_GREEN
                     elif eq_df.loc[idx, 'lastPrice'] <= temp_df.loc[idx, 'Support']:
                         logger.debug("Configured Equity price is less than or equal to configured Support")
-                        pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference)).color = COLOR_RED
+                        pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference + 1)).color = COLOR_RED
                     else:
                         logger.debug("Configured Equity price is with-in Resistance and Support")
-                        pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference)).color = COLOR_YELLOW
+                        pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference +1 )).color = COLOR_YELLOW
                     temp_col_number += 1
         else:
             logger.debug("Function create_price_vol_sheet, Equity Config df is None")
-
-        #pv.range(f'{get_col_name(row_number_1-1)}' + str(temp_row_number+1)).value = price_vol_up_list
-        #price_vol_up_df = pd.DataFrame(price_vol_up_list)
-        #pv.range(f'B{row_number_1 + int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 3}').options(index=False).value = price_vol_up_df.transpose()
-        #pv.range(f'B{row_number_1 + int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 3}').options(pd.DataFrame, index=False).value = price_vol_up_df.transpose()
 
 ############################# End - Function to compare Cumulative Price, Volume difference after every set duration ############ 
 
@@ -624,7 +654,7 @@ while True:
         logger.debug(f'Closing Excel and handling exception - {e}')
         sys.exit()  
     if pre_oc_sym != oc_sym or pre_oc_exp != oc_exp:
-        oc.range("G1:V4000").value = None
+        oc.range("G1:AD4000").value = None
         if pre_oc_sym != oc_sym:
             oc.range("B:B").value = oc.range("D6:E19").value = None
             exp_list = []
@@ -651,12 +681,7 @@ while True:
                 logger.debug("Trying to connect again...")
                 nse = NSE()
                 continue
-        #try:
-        #    df = nse.options_data(oc_sym, indices)
-        #except Exception as e:
-        #    logger.error(f'Error getting Options Data - {e}')
-        #    time.sleep(5)
-        #    continue
+
         df = nse.options_data(oc_sym, indices)
         logger.debug(f'Expiry date input is - {oc_exp}')
         if df is not None and oc_exp is not None:
@@ -673,19 +698,29 @@ while True:
             ce_df.set_index("strikePrice", drop=True, inplace=True)
             ce_df["Strike"] = ce_df.index
 
+            ce_df_greeks = get_option_greeks(ce_df, 'c', oc_exp)
+            ce_df_greeks = ce_df_greeks.rename(columns={"Delta":"CE Delta", "Gamma":"CE Gamma", "Theta":"CE Theta", "Vega":"CE Vega",
+                                                        "Rho":"CE Rho"})            
+            ce_df_final = pd.concat([ce_df_greeks,ce_df], axis=1).sort_index()
+
             pe_df = df[df["instrumentType"] == "PE"]
             pe_df = pe_df[["strikePrice","openInterest","changeinOpenInterest","impliedVolatility","lastPrice","change","totalTradedVolume"]]
             pe_df = pe_df.rename(columns={"openInterest":"PE OI", "changeinOpenInterest":"PE Change in OI", "impliedVolatility":"PE IV",
                                           "lastPrice":"PE LTP", "change":"PE LTP Change", "totalTradedVolume":"PE Volume"})
             pe_df.set_index("strikePrice", drop=True, inplace=True)
 
-            df = pd.concat([ce_df,pe_df], axis=1).sort_index()
+            pe_df_greeks = get_option_greeks(pe_df, 'p', oc_exp)
+            pe_df_greeks = pe_df_greeks[["Rho", "Vega", "Theta", "Gamma", "Delta"]]
+            pe_df_greeks = pe_df_greeks.rename(columns={"Delta":"PE Delta", "Gamma":"PE Gamma", "Theta":"PE Theta", "Vega":"PE Vega",
+                                                        "Rho":"PE Rho"})
+            pe_df_final = pd.concat([pe_df, pe_df_greeks], axis=1).sort_index()
+
+            df = pd.concat([ce_df_final,pe_df_final], axis=1).sort_index()
             df = df.replace(np.nan, 0)
             df["Strike"] = df.index
             df.index = [np.nan] * len(df)
 
             try:
-                #oc.range("D6").value = [["Timestamp", timestamp],
                 oc.range("D6").value = [["Spot LTP", underlying_value],
                                         ["Total Call OI", sum(list(df["CE OI"]))],
                                         ["Total Put OI", sum(list(df["PE OI"]))],
@@ -702,9 +737,7 @@ while True:
                                         ["Max Put Change in OI Strike",
                                         list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
                                         ]
-                #oc.range("D1").value = "Timestamp"
                 oc.range("E1").value = timestamp
-                #oc.range("E6").autofit()
                 oc.range("G1").value = df
             except Exception as e:
                 logger.error(f'Error printing values - {e}')
@@ -724,14 +757,12 @@ while True:
         CUMULATIVE_TURNOVER = cfg.range('B3').value
         CUMULATIVE_TURNOVER = CUMULATIVE_TURNOVER*ONE_CRORE
         CUMULATIVE_TURNOVER_DURATION = cfg.range('B4').value
-        #logger.debug(f'CUMULATIVE TURNOVER - {CUMULATIVE_TURNOVER}')
-        #logger.debug(f'CUMULATIVE TURNOVER DURATION - {CUMULATIVE_TURNOVER_DURATION}')
     except Exception as e:
         logger.debug(f'Closing Excel and handling exception - {e}')
         sys.exit()
     if pre_ind_sym != ind_sym:
         eq_sym = None
-        eq.range("I1:AD510").value = eq.range("D5:H30").value = None
+        eq.range("I1:AE510").value = eq.range("D5:H30").value = None
         eq.range("E1").value = eq.range("G1").value = None
         eq.range("E3").value = eq.range("G2").value = None
         sv.clear()
@@ -743,9 +774,9 @@ while True:
         col_number = 2
         row_number_1 = 2
         col_number_1 = 1
-        #col_number_2 = 2
         prev_time = curr_time = None
         prev_time_1 = datetime.now()
+        prev_time_2 = None
         prev_vol = curr_vol = []
         prev_vol_diff = curr_vol_diff = []
         prev_price = curr_price = []
@@ -761,18 +792,11 @@ while True:
 
     if pre_eq_sym != eq_sym:
         eq.range("D5:H30").value = None
-        #eq.range("F3").value = None
         eq.range("G3").value = None
     pre_ind_sym = ind_sym
     pre_eq_sym = eq_sym
     eq_df = None
     if ind_sym is not None:
-        #try:
-        #    eq_df = nse.equity_market_data(ind_sym)
-        #except Exception as e:
-        #    logger.error(f'Error getting Equity Data - {e}')
-        #    time.sleep(5)
-        #    continue
         eq_df = nse.equity_market_data(ind_sym)
         if eq_df is not None:
             eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series","identifier"],
@@ -781,28 +805,30 @@ while True:
             sorted_idx = eq_df.index.sort_values()
             eq_df = eq_df.loc[sorted_idx]
             rows_eq_df = len(eq_df.index)
+            duration_1 = None
             try:
                 eq.range("I1").value = eq_df
                 eq.range("E1").value = eq_df.loc[ind_sym,'lastUpdateTime']
                 eq.range("G2").value = eq_df.loc[ind_sym,'lastPrice']
                 eq.range("G1").value = eq_df.iloc[0]['lastUpdateTime']
                 curr_time = eq.range("G1").value
-                #eq.range("G1").autofit()
+                if prev_time_2 != None and curr_time != None and prev_time_2 != curr_time:
+                    duration_1 = curr_time - prev_time_2
+                if row_number == 1 or (row_number > 1 and duration_1 is not None and duration_1.total_seconds()/60 > DELIVERY_CHANGE_DURATION):
+                    eq.range("AB1").options(index=False).value = get_delivery_info(eq_df)
+                    prev_time_2 = curr_time
             except Exception as e:
-                logger.error(f'Error printing values - {e}')
+                logger.error(f'Error printing df values - {e}')
                 continue
 
             data = None
             if eq_sym is not None:                
-                #try:
-                #    data = nse.equity_info(eq_sym, trade_info=True)
-                #except Exception as e:
-                #    logger.error(f'Error getting Equity Info for {eq_sym} - {e}')
-                #    time.sleep(5)
-                #    continue
                 data = nse.equity_info(eq_sym, trade_info=True)
                 if data is not None:
-                    bid_list = ask_list = trd_data = []
+                    #bid_list = ask_list = trd_data = []
+                    bid_list = ask_list = []
+                    trd_data = []
+                    security_wise_dp = []
                     tot_buy = tot_sell = 0
                     eq.range("G3").value = eq_df.loc[eq_sym,'lastPrice']
                     for key,value in data.items():
@@ -818,16 +844,16 @@ while True:
                                     tot_buy = v
                                 elif str(k) == "totalSellQuantity":
                                     tot_sell = v
-                            break
+                        elif str(key) == "securityWiseDP":
+                            security_wise_dp.append(value)
 
                     bid_df = pd.DataFrame(bid_list)
                     bid_df.rename(columns={"price":"Bid Price","quantity":"Bid Quantity"},inplace=True)
                     ask_df = pd.DataFrame(ask_list)
-                    ask_df.rename(columns={"price":"Ask Price","quantity":"Ask Quantity"},inplace=True)              
- 
+                    ask_df.rename(columns={"price":"Ask Price","quantity":"Ask Quantity"},inplace=True) 
                     bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
-
                     trd_df = pd.DataFrame(trd_data).transpose()
+                    security_wise_dp_df = pd.DataFrame(security_wise_dp).transpose()
                     try:
                         eq.range("D5").value = trd_df
                         eq.range("E5").value = None
@@ -835,11 +861,14 @@ while True:
                         eq.range("F7").value = "₹ Cr"
                         eq.range("F8").value = "₹ Cr"
                         eq.range("F9").value = "₹ Cr"
-                        eq.range("D16").options(pd.DataFrame, index=False).value = bid_ask_df
-                        eq.range("D22").value = "TotalBuyQty"
-                        eq.range("E22").value = tot_buy
-                        eq.range("F22").value = "TotalSellQty"
-                        eq.range("G22").value = tot_sell
+                        eq.range("D15").value = security_wise_dp_df
+                        eq.range("E15").value = None
+                        eq.range("F18").value = "%"
+                        eq.range("D22").options(pd.DataFrame, index=False).value = bid_ask_df
+                        eq.range("D28").value = "TotalBuyQty"
+                        eq.range("E28").value = tot_buy
+                        eq.range("F28").value = "TotalSellQty"
+                        eq.range("G28").value = tot_sell
                     except Exception as e:
                         logger.error(f'Error printing trading info df - {e}')
                         continue
@@ -919,7 +948,6 @@ while True:
     deriv_data = None
     if fd_sym is not None:
         indices = True if fd_sym == "NIFTY" or fd_sym == "BANKNIFTY" else False
-        #fd_df = nse.futures_data(fd_sym, indices)
         deriv_data = nse.derivatives_data(fd_sym)
         if deriv_data is not None:
             meta_data_list = []
@@ -933,9 +961,9 @@ while True:
             trd_info_df = pd.DataFrame(trd_info_list)
             meta_data_df = meta_data_df.set_index("identifier", drop=True)
             meta_data_df.drop(["optionType","strikePrice","closePrice"],axis=1,inplace=True)
+            trd_info_df.drop(["tradedVolume","value","premiumTurnover","marketLot"],axis=1,inplace=True)
             try:
                 fd.range("I1").value = meta_data_df
-                trd_info_df.drop(["tradedVolume","value","premiumTurnover","marketLot"],axis=1,inplace=True)
                 fd.range("U1").options(index=False).value = trd_info_df
                 deriv_timestamp = deriv_data["fut_timestamp"]
                 fd.range("E1").value = deriv_timestamp

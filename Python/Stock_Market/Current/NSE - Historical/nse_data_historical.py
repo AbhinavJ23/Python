@@ -5,25 +5,15 @@ import xlwings as xw
 import dateutil.parser
 import numpy as np
 import time
-#import logging
 from datetime import datetime, timedelta
 from base_logger import logger
 import ctypes
-#from py_vollib.black_scholes.implied_volatility import implied_volatility
 from py_vollib.black_scholes.greeks.analytical import delta,gamma,rho,theta,vega
-
-####################### Initializing Logging Start #######################
-#logging.basicConfig(filename='Nse_Data_Historical_'+time.strftime('%Y%m%d%H%M%S')+'.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-#logger = logging.getLogger()
-####################### Initializing Logging End #######################
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '23/09/2024 00:00:00'
+    valid_from_str = '30/09/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
-    #valid_from_time = datetime(2024, 8, 15, 0, 0, 0)
-    #duration = timedelta(days=5, hours=0, minutes=0, seconds=0)
-    #valid_till_str = '17/08/2024 22:30:30'   
     valid_till_time = valid_from_time + timedelta(days=7)
     time_now = datetime.now()
     time_left = valid_till_time - time_now
@@ -32,16 +22,13 @@ def check_validity():
     total_seconds = time_left.total_seconds()
     logger.debug(f'Total Seconds Left - {total_seconds}')
     if total_seconds < 0:
-        ctypes.windll.user32.MessageBoxW(0, "Your product trial period has expired!", "Error",0)
+        ctypes.windll.user32.MessageBoxW(0, "Your product usage period has ended!", "Error",0)
         return False
     else:    
-        #hours = round((total_seconds - time_left.days*24*60*60)/3600)
-        #minutes = round((total_seconds // 60) % 60)
-        #seconds = round(total_seconds % 60)
         hours = int((total_seconds - time_left.days*24*60*60)//3600)
         minutes = int((total_seconds - time_left.days*24*60*60 - hours*60*60)//60)
         seconds = round(total_seconds - time_left.days*24*60*60 - hours*60*60 - minutes*60)
-        message = "Your product trial period will expire in " + str(time_left.days) + " day(s) " + str(hours) +" hours(s) " + str(minutes) + " min(s) and " + str(seconds) + " second(s)"
+        message = "Your product usage period will expire in " + str(time_left.days) + " day(s) " + str(hours) +" hours(s) " + str(minutes) + " min(s) and " + str(seconds) + " second(s)"
         ctypes.windll.user32.MessageBoxW(0, message, "Warning",0)
         return True
 ############################# End - Function to check validity,expiry #############################
@@ -61,7 +48,6 @@ if not os.path.exists(file_name):
         wb.sheets.add("OptionChain")
         wb.sheets.add("EquityData")
         wb.save(file_name)
-        #wb.close()
         logger.debug("Created Excel - " + file_name)
     except Exception as e:
         logger.critical(f'Error Creating Excel - {e}')
@@ -105,10 +91,7 @@ fd.range('H1:H1000').color = COLOR_GREY
 ####################### Initializing OptionChain sheet #######################
 oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
 oc_df = None
-#try:    
 oc_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
-#except Exception as e:
-    #logger.critical(f'Error getting FNO symbols for Options Data - {e}')
 if oc_df is not None:
     oc_df = oc_df.set_index("FNO Symbol", drop=True)
     oc.range("A1").value = oc_df
@@ -131,7 +114,7 @@ exp_list = []
 logger.debug("OptionChain sheet initialized")
 
 ######################### Initializing EquityData sheet #######################
-eq.range("A:A").value = eq.range("D5:H30").value = eq.range("I1:AD510").value = None
+eq.range("A:A").value = eq.range("D5:H30").value = eq.range("I1:AE510").value = None
 eq_df = pd.DataFrame({"Index Symbol":nse.equity_market_categories})
 eq_df = eq_df.set_index("Index Symbol", drop=True)
 eq.range("A1").value = eq_df
@@ -155,10 +138,7 @@ logger.debug("EquityData sheet initialized")
 ####################### Initializing FuturesData sheet #######################
 fd.range("A:A").value = fd.range("G1:AD100").value = None
 fd_df = None
-#try:
 fd_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
-#except Exception as e:
-    #logger.critical(f'Error getting FNO symbols for Futures Data - {e}')
 if fd_df is not None:
     fd_df = fd_df.set_index("FNO Symbol", drop=True)
     fd.range("A1").value = fd_df
@@ -212,7 +192,6 @@ def get_col_name(num):
 ############################# Start - Function to get option greeks #############################
 def get_option_greeks(df, call_or_put, expiry):
     time = ((datetime(expiry.year, expiry.month, expiry.day, 15, 30) - datetime.now()) / timedelta(days=1)) / 365
-    #time = (datetime(expiry.year, expiry.month, expiry.day, 15, 30) - datetime.now()).total_seconds() / (60*60*24*365)
     logger.debug (f'Time to Expiry in Years - {time}')
     int_rate = RISK_FREE_INT_RATE
     greek_list = []
@@ -225,7 +204,6 @@ def get_option_greeks(df, call_or_put, expiry):
             elif call_or_put == 'p':
                 last_price = row['PE LTP']
                 imp_vol = row['PE IV']
-            #logger.debug(f'underlying_price - {last_price}, Strike - {strike}, time - {time}, imp vol - {imp_vol}')
             if last_price <= 0 or imp_vol <= 0:
                  greek_list.append({"Delta": 0, "Gamma": 0, "Theta": 0, "Vega": 0, "Rho": 0})
             else:
@@ -262,23 +240,15 @@ def get_delivery_info(df):
                 logger.error(f'Error getting Delivery Info for {symbol} - Delivery Info Data is Null')
                 flag = False
                 break
-                #delivery_info_list.append({"quantityTraded": 'Error', "deliveryQuantity": 'Error', "deliveryToTradedQuantity": 'Error'})
-                #time.sleep(5)
-                #logger.debug("Trying to connect again...")
-                #nse = NSE()
-                #continue  
-                #empty_df = pd.DataFrame(index=df.index, columns=['quantityTraded','deliveryQuantity','deliveryToTradedQuantity'])
-                #empty_df.fillna(0)
-                #return empty_df
         else:
-            delivery_info_list.append({"quantityTraded": 'NA', "deliveryQuantity": 'NA', "deliveryToTradedQuantity": 'NA'})
+            delivery_info_list.append({"quantityTraded": 'NA', "deliveryQuantity": 'NA', "deliveryToTradedQuantity": 'NA', "secWiseDelPosDate": 'NA'})
     
     if len(delivery_info_list) == len(df.index) and flag:
         delivery_info_df = pd.DataFrame(delivery_info_list, index=df.index)
-        delivery_info_df.drop(["seriesRemarks","secWiseDelPosDate"],axis=1,inplace=True)
+        delivery_info_df.drop(["seriesRemarks"],axis=1,inplace=True)
         return delivery_info_df
     else:
-        empty_df = pd.DataFrame(index=df.index, columns=['quantityTraded','deliveryQuantity','deliveryToTradedQuantity'])
+        empty_df = pd.DataFrame(index=df.index, columns=['quantityTraded','deliveryQuantity','deliveryToTradedQuantity','secWiseDelPosDate'])
         empty_df.fillna(0)
         return empty_df
 
@@ -318,20 +288,13 @@ while True:
                 oc.range("B1").value = exp_df
                 oc.range("B1").autofit()
                 logger.debug('Options expiry list created')
-                #logger.debug(exp_df)
             else:
                 logger.error(f'Error getting Options Expiry Dates - {e}')
                 time.sleep(5)
                 logger.debug("Trying to connect again...")
                 nse = NSE()
                 continue
-        #try:
-        #    logger.debug('Getting Options data')
-        #    df = nse.options_data(oc_sym, indices)
-        #except Exception as e:
-        #    logger.error(f'Error getting Options Data - {e}')
-        #    time.sleep(5)
-        #    continue
+
         df = nse.options_data(oc_sym, indices)
         logger.debug(f'Expiry date input is - {oc_exp}')
         if df is not None and oc_exp is not None:
@@ -350,9 +313,7 @@ while True:
 
             ce_df_greeks = get_option_greeks(ce_df, 'c', oc_exp)
             ce_df_greeks = ce_df_greeks.rename(columns={"Delta":"CE Delta", "Gamma":"CE Gamma", "Theta":"CE Theta", "Vega":"CE Vega",
-                                                        "Rho":"CE Rho"})
-            #logger.debug("CE DF Greeks:")
-            #logger.debug(ce_df_greeks)
+                                                        "Rho":"CE Rho"})            
             ce_df_final = pd.concat([ce_df_greeks,ce_df], axis=1).sort_index()
 
             pe_df = df[df["instrumentType"] == "PE"]
@@ -365,8 +326,6 @@ while True:
             pe_df_greeks = pe_df_greeks[["Rho", "Vega", "Theta", "Gamma", "Delta"]]
             pe_df_greeks = pe_df_greeks.rename(columns={"Delta":"PE Delta", "Gamma":"PE Gamma", "Theta":"PE Theta", "Vega":"PE Vega",
                                                         "Rho":"PE Rho"})
-            #logger.debug("PE DF Greeks:")
-            #logger.debug(pe_df_greeks)
             pe_df_final = pd.concat([pe_df, pe_df_greeks], axis=1).sort_index()
 
             df = pd.concat([ce_df_final,pe_df_final], axis=1).sort_index()
@@ -374,7 +333,6 @@ while True:
             df["Strike"] = df.index
             df.index = [np.nan] * len(df)
             rows_oc_df = len(df.index)
-            #oc.range("D6").value = [["Timestamp", timestamp],
             try:
                 oc.range("D6").value = [["Spot LTP", underlying_value],
                                         ["Total Call OI", sum(list(df["CE OI"]))],
@@ -392,11 +350,8 @@ while True:
                                         ["Max Put Change in OI Strike",
                                         list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
                                         ]
-                #oc.range("D1").value = "Current Time"
                 oc.range("E1").value = timestamp
                 oc_curr_time = oc.range("E1").value
-                #oc.range("E1").autofit()           
-                #oc.range("G1").value = df
             except Exception as e:
                 logger.error(f'Error printing values - {e}')
                 continue           
@@ -415,7 +370,6 @@ while True:
                 oc_duration = oc_curr_time - oc_prev_time
 
             logger.debug(f'Options : Previous time - {oc_prev_time}' + f',Current time - {oc_curr_time}' + f',Duration -  {oc_duration}')            
-            #if oc_prev_time != None and oc_prev_time != oc_curr_time:                
             if oc_duration is not None and oc_duration.total_seconds() > 0:
                 logger.debug(f'Printing the options chain df for the next time at {oc_curr_time}')
                 oc_row_number += rows_oc_df
@@ -424,7 +378,6 @@ while True:
                     oc.range(f'G{oc_row_number}' + ':' + f'AD{oc_row_number}').color = COLOR_GREY               
                     oc.range(f'G{oc_row_number}').value = df                            
                     oc.range(f'F{oc_row_number}').value = oc_curr_time
-                    #oc.range(f'F{oc_row_number}').autofit()
                     oc.range(f'F{oc_row_number}').font.bold = True
                     oc.range(f'G{oc_row_number}' + ':' + f'AD{oc_row_number}').font.bold = True
                 except Exception as e:
@@ -450,7 +403,7 @@ while True:
         sys.exit()
     if pre_ind_sym != ind_sym:
         eq_sym = None
-        eq.range("I1:AD40000").value = eq.range("D5:H30").value = None
+        eq.range("I1:AE40000").value = eq.range("D5:H30").value = None
         eq.range("E1").value = eq.range("G1").value = None
         eq.range("E3").value = eq.range("G2").value = None
         eq_row_number = 1
@@ -460,19 +413,12 @@ while True:
 
     if pre_eq_sym != eq_sym:
         eq.range("D5:H30").value = None
-        #eq.range("F3").value = None
         eq.range("G3").value = None
     pre_ind_sym = ind_sym
     pre_eq_sym = eq_sym
     eq_df = None 
     if ind_sym is not None:
         logger.debug(f'value of Equity row number is {eq_row_number}')
-        #try:            
-        #    eq_df = nse.equity_market_data(ind_sym)
-        #except Exception as e:
-        #    logger.error(f'Error getting Equity Data - {e}')
-        #    time.sleep(5)
-        #    continue
         eq_df = nse.equity_market_data(ind_sym)
         if eq_df is not None:            
             eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series","identifier"],
@@ -481,13 +427,11 @@ while True:
             sorted_idx = eq_df.index.sort_values()
             eq_df = eq_df.loc[sorted_idx]
             rows_eq_df = len(eq_df.index)
-            #eq.range("I1").value = eq_df
             try:
                 eq.range("E1").value = eq_df.loc[ind_sym,'lastUpdateTime']
                 eq.range("G2").value = eq_df.loc[ind_sym,'lastPrice']            
                 eq.range("G1").value = eq_df.iloc[0]['lastUpdateTime']
                 eq_curr_time = eq.range("G1").value            
-                #eq.range("G1").autofit()
             except Exception as e:
                 logger.error(f'Error printing values - {e}')
                 continue
@@ -500,7 +444,7 @@ while True:
                 logger.debug(f'Printing the Equity df for the first time at {eq_curr_time}')
                 try:
                     eq.range(f'I{eq_row_number}').value = eq_df
-                    eq.range(f'AA{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
+                    eq.range(f'AB{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
                 except Exception as e:
                     logger.error(f'Error printing equity df - {e}')
                     continue
@@ -511,17 +455,17 @@ while True:
                 eq_row_number += rows_eq_df
                 eq_row_number += 1
                 try:
-                    eq.range(f'I{eq_row_number}' + ':' + f'AD{eq_row_number}').color = COLOR_GREY               
+                    eq.range(f'I{eq_row_number}' + ':' + f'AE{eq_row_number}').color = COLOR_GREY               
                     eq.range(f'I{eq_row_number}').value = eq_df                            
                     eq.range(f'G{eq_row_number}').value = eq_curr_time
                     eq.range(f'G{eq_row_number}').font.bold = True
-                    eq.range(f'I{eq_row_number}' + ':' + f'AD{eq_row_number}').font.bold = True
+                    eq.range(f'I{eq_row_number}' + ':' + f'AE{eq_row_number}').font.bold = True
                 except Exception as e:
                     logger.error(f'Error printing equity df - {e}')
                     continue        
             if eq_duration is not None and eq_duration.total_seconds()/60 > DELIVERY_CHANGE_DURATION:
                 try:
-                    eq.range(f'AA{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
+                    eq.range(f'AB{eq_row_number}').options(index=False).value = get_delivery_info(eq_df)
                 except Exception as e:
                     logger.error(f'Error printing delivery info df - {e}')
                     continue
@@ -532,15 +476,9 @@ while True:
 
             data = None
             if eq_sym is not None:                
-                #try:
-                #    data = nse.equity_info(eq_sym, trade_info=True)
-                #except Exception as e:
-                #    logger.error(f'Error getting Equity Info for {eq_sym} - {e}')
-                #    time.sleep(5)
-                #    continue
                 data = nse.equity_info(eq_sym, trade_info=True)
                 if data is not None:
-                    bid_list = ask_list = [] #trd_data = security_wise_dp = []
+                    bid_list = ask_list = []
                     trd_data = []
                     security_wise_dp = []
                     tot_buy = tot_sell = 0
@@ -607,12 +545,11 @@ while True:
         logger.debug(f'Closing Excel and handling exception - {e}')
         sys.exit()
     if pre_fd_sym != fd_sym:
-        fd.range("G1:AD100").value = None
+        fd.range("G1:AD5000").value = None
         pre_fd_sym = fd_sym
     deriv_data = None
     if fd_sym is not None:
         indices = True if fd_sym == "NIFTY" or fd_sym == "BANKNIFTY" else False
-        #fd_df = nse.futures_data(fd_sym, indices)
         deriv_data = nse.derivatives_data(fd_sym)
         if deriv_data is not None:
             meta_data_list = []
@@ -627,9 +564,7 @@ while True:
             meta_data_df = meta_data_df.set_index("identifier", drop=True)
             meta_data_df.drop(["optionType","strikePrice","closePrice"],axis=1,inplace=True)
             rows_fd_df = len(meta_data_df.index)
-            #fd.range("I1").value = meta_data_df
             trd_info_df.drop(["tradedVolume","value","premiumTurnover","marketLot"],axis=1,inplace=True)
-            #fd.range("U1").options(index=False).value = trd_info_df
             deriv_timestamp = deriv_data["fut_timestamp"]
             try:
                 fd.range("E1").value = deriv_timestamp
