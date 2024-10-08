@@ -17,9 +17,12 @@ class NSE:
                         "accept-language":"en-US,en;q=0.9",
                         "user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
                                     "Chrome/123.0.0.0 Safari/537.36"}
+        try:
+            self.session = requests.Session()
+            self.session.get('https://www.nseindia.com', headers= self.headers)
+        except (requests.exceptions.ConnectionError) as e:
+            logger.error(f'Function __init__ - Error - {e}')
 
-        self.session = requests.Session()
-        self.session.get('https://www.nseindia.com', headers= self.headers)
 
     def pre_market_data(self, category):
         pre_market_category = {"NIFTY 50": "NIFTY", "Nifty Bank": "BANKNIFTY", "Emerge": "SME", "Securities in F&O":"FO", 
