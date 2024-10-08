@@ -12,7 +12,7 @@ from py_vollib.black_scholes.greeks.analytical import delta,gamma,rho,theta,vega
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '30/09/2024 00:00:00'
+    valid_from_str = '07/10/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     valid_till_time = valid_from_time + timedelta(days=7)
     time_now = datetime.now()
@@ -191,6 +191,7 @@ def get_col_name(num):
 
 ############################# Start - Function to get option greeks #############################
 def get_option_greeks(df, call_or_put, expiry):
+    logger.debug('Function get_option_greeks')
     time = ((datetime(expiry.year, expiry.month, expiry.day, 15, 30) - datetime.now()) / timedelta(days=1)) / 365
     logger.debug (f'Time to Expiry in Years - {time}')
     int_rate = RISK_FREE_INT_RATE
@@ -225,12 +226,14 @@ def get_option_greeks(df, call_or_put, expiry):
 
 ############################# Start - Function to get delivery info ###########################
 def get_delivery_info(df):
+    logger.debug('Function get_delivery_info')
     delivery_info_list = []
     flag = True
     for i in df.index:
         symbol = i
         data = None
-        if symbol != 'NIFTY 50':
+        #if symbol != 'NIFTY 50':
+        if 'NIFTY' not in symbol:
             data = nse.equity_info(symbol, trade_info=True)
             if data is not None:
                 for key,value in data.items():              
@@ -242,14 +245,17 @@ def get_delivery_info(df):
                 break
         else:
             delivery_info_list.append({"quantityTraded": 'NA', "deliveryQuantity": 'NA', "deliveryToTradedQuantity": 'NA', "secWiseDelPosDate": 'NA'})
+            logger.debug(f'Adding NA to {symbol} data')
     
     if len(delivery_info_list) == len(df.index) and flag:
         delivery_info_df = pd.DataFrame(delivery_info_list, index=df.index)
         delivery_info_df.drop(["seriesRemarks"],axis=1,inplace=True)
+        logger.debug('Returning delivery_info_df')
         return delivery_info_df
     else:
         empty_df = pd.DataFrame(index=df.index, columns=['quantityTraded','deliveryQuantity','deliveryToTradedQuantity','secWiseDelPosDate'])
         empty_df.fillna(0)
+        logger.debug('Returning empty_df')
         return empty_df
 
 ############################# End - Function to get delivery info #############################
