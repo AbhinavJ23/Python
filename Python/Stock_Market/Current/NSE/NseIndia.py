@@ -13,43 +13,63 @@ class NSE:
     holiday_categories = ['Clearing', 'Trading']
 
     def __init__(self):
-        self.headers = {"accept-encoding":"gzip, deflate, br, zstd",
+        self.headers = {#"accept-encoding":"gzip, deflate, br, zstd",
                         "accept-language":"en-US,en;q=0.9",
                         "user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                                    "Chrome/123.0.0.0 Safari/537.36"}
+                                    "Chrome/129.0.0.0 Safari/537.36"}
+        
+        ##### FOR FUTURE USE IF REQUIRED #####
+        #self.headers = {"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,/;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        #                "accept-language": "en-US,en;q=0.9,en-IN;q=0.8,en-GB;q=0.7",
+        #                "cache-control": "max-age=0",
+        #                "priority": "u=0, i",
+        #                "sec-ch-ua": """Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129""",
+        #                "sec-ch-ua-mobile": "?0",
+        #                "sec-ch-ua-platform": "Windows",
+        #                "sec-fetch-dest": "document",
+        #                "sec-fetch-mode": "navigate",
+        #                "sec-fetch-site": "none",
+        #                "sec-fetch-user": "?1",
+        #                "upgrade-insecure-requests": "1",
+        #                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0"}
+        
         try:
             self.session = requests.Session()
             self.session.get('https://www.nseindia.com', headers= self.headers)
         except (requests.exceptions.ConnectionError) as e:
             logger.error(f'Function __init__ - Error - {e}')
 
-
     def pre_market_data(self, category):
         pre_market_category = {"NIFTY 50": "NIFTY", "Nifty Bank": "BANKNIFTY", "Emerge": "SME", "Securities in F&O":"FO", 
                             "Others": "OTHERS", "All": "ALL"}
-        data = self.session.get(f'https://www.nseindia.com/api/market-data-pre-open?key={pre_market_category[category]}',
-                                headers=self.headers).json()["data"]
-        
-        temp_data = []
-        for i in data:
-            temp_data.append(i["metadata"])
-        df = pd.DataFrame(temp_data)
-        df = df.set_index('symbol', drop=True)
-        return df
+        try:
+            response = self.session.get(f'https://www.nseindia.com/api/market-data-pre-open?key={pre_market_category[category]}', headers=self.headers)
+            response.raise_for_status()
+        except (requests.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError, 
+                requests.ConnectionError, requests.exceptions.HTTPError) as e:
+            logger.error(f'Function pre_market_data - Error - {e}')
+            return None
+        if response.status_code != 401:
+            try:
+                data = response.json()["data"]
+                temp_data = []
+                for i in data:
+                    temp_data.append(i["metadata"])
+                df = pd.DataFrame(temp_data)
+                df = df.set_index('symbol', drop=True)
+                return df
+            except (requests.JSONDecodeError,requests.exceptions.JSONDecodeError,ValueError,KeyError) as e:
+                logger.error(f'Function pre_market_data - Decoding JSON has failed - {e}')
+                return None
     
     def equity_market_data(self, category, symbol_list=False):
         category = category.upper().replace(' ', '%20').replace('&', '%26')
-        #logger.debug("Function equity_market_data")
-        #data = self.session.get(f'https://www.nseindia.com/api/equity-stockindices?index={category}', headers=self.headers).json()["data"]
         try:
             response = self.session.get(f'https://www.nseindia.com/api/equity-stockindices?index={category}', headers=self.headers)
             response.raise_for_status()
         except (requests.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError, 
                 requests.ConnectionError, requests.exceptions.HTTPError) as e:
             logger.error(f'Function equity_market_data - Error - {e}')
-            #logger.debug(f'HTTPStatus is - {HTTPStatus.description()}')
-            #logger.debug(f'Exception Status code - {e.response.status_code()}')
-            #self.__init__()
             return None
         if response.status_code != 401:
             try:
@@ -61,7 +81,7 @@ class NSE:
                     return list(df.index)
                 else:
                     return df
-            except (ValueError,KeyError) as e:
+            except (requests.JSONDecodeError,requests.exceptions.JSONDecodeError,ValueError,KeyError) as e:
                 logger.error(f'Function equity_market_data - Decoding JSON has failed - {e}')
                 return None
         else:
@@ -74,7 +94,6 @@ class NSE:
     
     def equity_info(self, symbol, trade_info=False):        
         symbol = symbol.replace(' ', '%20').replace('&', '%26')
-        #data = self.session.get("https://www.nseindia.com/api/quote-equity?symbol=" + symbol + ("&section=trade_info" if trade_info else ""), headers=self.headers).json()
         try:
             response = self.session.get("https://www.nseindia.com/api/quote-equity?symbol=" + symbol + ("&section=trade_info" if trade_info else ""), headers=self.headers)
             response.raise_for_status()
@@ -86,7 +105,7 @@ class NSE:
             try:
                 data = response.json()
                 return data
-            except (ValueError,KeyError) as e:
+            except (requests.JSONDecodeError,requests.exceptions.JSONDecodeError,ValueError,KeyError) as e:
                 logger.error(f'Function equity_info - Decoding JSON has failed - {e}')
                 return None
         else:
@@ -94,7 +113,6 @@ class NSE:
     
     def futures_data(self, symbol, indices=False):
         symbol = symbol.replace(' ', '%20').replace('&', '%26')
-        #data = self.session.get("https://www.nseindia.com/api/quote-derivative?symbol=" + symbol, headers=self.headers).json()
         try:
             response = self.session.get("https://www.nseindia.com/api/quote-derivative?symbol=" + symbol, headers=self.headers)
             response.raise_for_status()
@@ -113,7 +131,7 @@ class NSE:
                 df = pd.DataFrame(temp_data)
                 df = df.set_index("identifier", drop=True)
                 return df
-            except (ValueError,KeyError) as e:
+            except (requests.JSONDecodeError,requests.exceptions.JSONDecodeError,ValueError,KeyError) as e:
                 logger.error(f'Function futures_data - Decoding JSON has failed - {e}')
                 return None
         else:
@@ -121,7 +139,6 @@ class NSE:
 
     def derivatives_data(self, symbol):
         symbol = symbol.replace(' ', '%20').replace('&', '%26')
-        #data = self.session.get("https://www.nseindia.com/api/quote-derivative?symbol=" + symbol, headers=self.headers).json()
         try:
             response = self.session.get("https://www.nseindia.com/api/quote-derivative?symbol=" + symbol, headers=self.headers)
             response.raise_for_status()
@@ -133,7 +150,7 @@ class NSE:
             try:
                 data = response.json()
                 return data
-            except (ValueError,KeyError) as e:
+            except (requests.JSONDecodeError,requests.exceptions.JSONDecodeError,ValueError,KeyError) as e:
                 logger.error(f'Function  derivatives_data - Decoding JSON has failed - {e}')
                 return None
         else:
@@ -145,7 +162,6 @@ class NSE:
             url = "https://www.nseindia.com/api/option-chain-equities?symbol="+ symbol
         else:
             url = "https://www.nseindia.com/api/option-chain-indices?symbol="+ symbol
-        #data = self.session.get(url, headers=self.headers).json()["records"]
         try:
             response = self.session.get(url, headers=self.headers)
             response.raise_for_status()
@@ -167,7 +183,7 @@ class NSE:
                 df = pd.DataFrame(op_data)
                 df = df.set_index("identifier", drop=True)
                 return df
-            except (ValueError,KeyError) as e:
+            except (requests.JSONDecodeError,requests.exceptions.JSONDecodeError,ValueError,KeyError) as e:
                 logger.error(f'Function options_data - Decoding JSON has failed - {e}')
                 return None
         else:

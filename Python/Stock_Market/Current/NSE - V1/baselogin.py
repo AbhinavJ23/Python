@@ -2,6 +2,7 @@ import hashlib
 import platform
 from baselogger import logger
 from basedb import DBUtils
+from users import Users
 #import tkinter as tk
 import customtkinter as ctk
 import tkinter.messagebox as tkmb
@@ -73,8 +74,9 @@ class Login:
     def valid_user(self, user_id):
         logger.debug("Checking valid user")
         valid = False
-        with open('users.json') as cfg:
-            data = json.load(cfg)
+        #with open('users.json') as cfg:
+        #    data = json.load(cfg)
+        data = Users.user_data
         for item in data["Users"]:
             if user_id == item["UserId"]:
                 valid = True
@@ -184,9 +186,9 @@ class Login:
     def do_login(self):
         #global is_logged_in
         logger.debug("do_login")
-        with open('users.json') as cfg:
-            data = json.load(cfg)
-
+        #with open('users.json') as cfg:
+        #    data = json.load(cfg)
+        data = Users.user_data
         logger.debug(data)
         logger.debug(f'System - {self.system}')
         logger.debug(f'Node - {self.node}')

@@ -12,11 +12,14 @@ import ctypes
 from py_vollib.black_scholes.greeks.analytical import delta,gamma,rho,theta,vega
 from baselogin import Login
 
+if getattr(sys, 'frozen', False):
+    import pyi_splash
+
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
     valid_from_str = '14/10/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S') 
-    valid_till_time = valid_from_time + timedelta(days=7)
+    valid_till_time = valid_from_time + timedelta(days=30)
     time_now = datetime.now()
     time_left = valid_till_time - time_now
     logger.debug(f'Time Left - {time_left}')
@@ -49,11 +52,15 @@ def check_validity():
         return True
 ############################# End - Function to check validity,expiry #############################
 
+if getattr(sys, 'frozen', False):
+    pyi_splash.close()
+
 login = Login()
+
 if login.is_logged_in:
-    logger.debug("LOGGED IN")
+    logger.debug("Logged in. Proceeding further....")
 else:
-    logger.debug("NOT LOGGED IN. Exiting..")
+    logger.error("Not Logged in. Exiting....")
     sys.exit()
 
 status = check_validity()
