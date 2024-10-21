@@ -87,10 +87,45 @@ class NSE:
         else:
             return None
         
-    def about_holidays(self, category):
-        data = self.session.get(f'https://www.nseindia.com/api/holiday-master?type={category.lower()}', headers=self.headers).json()
-        df = pd.DataFrame(list(data.values())[0])
-        return df
+    def top_gainers_loosers(self, gainers = True):
+        category = "Securities in F&O"
+        category = category.upper().replace(' ', '%20').replace('&', '%26')
+        try:
+            response = self.session.get(f'https://www.nseindia.com/api/equity-stockindices?index={category}', headers=self.headers)
+            response.raise_for_status()
+        except (requests.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError, 
+                requests.ConnectionError, requests.exceptions.HTTPError) as e:
+            logger.error(f'Function top_gainers_loosers - Error - {e}')
+            return None
+        if response.status_code != 401:
+            try:
+                data = response.json()["data"]
+                df = pd.DataFrame(data)
+                if gainers:
+                    df.sort_values(by="pChange", ascending = False)
+                else:
+                    df = df.sort_values(by="pChange")
+                return df.head(5)
+            except (requests.JSONDecodeError,requests.exceptions.JSONDecodeError,ValueError,KeyError) as e:
+                logger.error(f'Function top_gainers_loosers - Decoding JSON has failed - {e}')
+                return None
+        
+    def nse_holidays(self, type):
+        try:
+            response = self.session.get(f'https://www.nseindia.com/api/holiday-master?type={type.lower()}', headers=self.headers)
+            response.raise_for_status()
+        except (requests.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError, 
+                requests.ConnectionError, requests.exceptions.HTTPError) as e:
+            logger.error(f'Function nse_holidays - Error - {e}')
+            return None
+        if response.status_code != 401:
+            try:
+                data = response.json()
+                df = pd.DataFrame(list(data.values())[0])
+                return df
+            except (requests.JSONDecodeError,requests.exceptions.JSONDecodeError,ValueError,KeyError) as e:
+                logger.error(f'Function nse_holidays - Decoding JSON has failed - {e}')
+                return None
     
     def equity_info(self, symbol, trade_info=False):        
         symbol = symbol.replace(' ', '%20').replace('&', '%26')

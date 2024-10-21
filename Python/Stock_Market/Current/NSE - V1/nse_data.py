@@ -125,7 +125,7 @@ oc.range('C1').column_width = 2
 oc.range('G1').column_width = 2
 eq.range('1:1').font.bold = True
 eq.range('1:1').color = COLOR_GREY
-eq.range('B1:C34').color = COLOR_GREY
+eq.range('B1:C40').color = COLOR_GREY
 eq.range('B1').column_width = 1
 eq.range('C1').column_width = 1
 eq.range('H1').column_width = 2
@@ -194,7 +194,7 @@ eq.range("A1:A50").autofit()
 eq.range("D2").value, eq.range("D3").value = "Enter Index ->", "Enter Equity ->"
 eq.range('D2').font.bold = True
 eq.range('D3').font.bold = True
-eq.range('A35:G35').color = COLOR_GREY
+eq.range('A40:G40').color = COLOR_GREY
 eq.range("D1").value = "Index Time"
 eq.range("D1").autofit()
 eq.range("F1").value = "Equity Time"
@@ -666,6 +666,85 @@ def create_price_vol_sheet(df, time, row_number_1):
 
 ############################# End - Function to compare Cumulative Price, Volume difference after every set duration ############ 
 
+############################# Start - Function to print top 5 gainers and loosers ############ 
+def print_top_gainers_loosers(df):
+    gainers_df = df.sort_values(by="pChange", ascending = False)
+    loosers_df = df.sort_values(by="pChange")
+    #logger.debug(f'top 5 gainsers - {gainers_df.head(5)}')
+    #logger.debug(f'top 5 loosers - {loosers_df.head(5)}')
+    eq.range("D31").value = "Top Gainers"
+    eq.range('D31').font.bold = True
+    eq.range("F31").value = "Top Loosers"
+    eq.range('F31').font.bold = True
+    eq.range("D32").value = gainers_df.head(5)['pChange']    
+    eq.range("F32").value = loosers_df.head(5)['pChange']
+############################# End - Function to print top 5 gainers and loosers ############
+
+############################# Start - Function to print equity info ############
+def print_equity_info(df, json_data, eq_symbol):
+    ret = True
+	#bid_list = ask_list = trd_data = []
+    bid_list = ask_list = []
+    trd_data = []
+    security_wise_dp = []
+    tot_buy = tot_sell = 0
+    eq.range("G3").value = df.loc[eq_symbol,'lastPrice']
+    for key,value in json_data.items():
+        if str(key) == "marketDeptOrderBook":
+            for k,v in value.items():
+                if str(k) == "bid":
+                    bid_list = v
+                elif str(k) == "ask":
+                    ask_list = v
+                elif str(k) == "tradeInfo":
+                    trd_data.append(v)
+                elif str(k) == "totalBuyQuantity":
+                    tot_buy = v
+                elif str(k) == "totalSellQuantity":
+                    tot_sell = v
+        elif str(key) == "securityWiseDP":
+            security_wise_dp.append(value)
+    
+    bid_df = pd.DataFrame(bid_list)
+    bid_df.rename(columns={"price":"Bid Price","quantity":"Bid Quantity"},inplace=True)
+    ask_df = pd.DataFrame(ask_list)
+    ask_df.rename(columns={"price":"Ask Price","quantity":"Ask Quantity"},inplace=True) 
+    bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
+    trd_df = pd.DataFrame(trd_data)
+    trd_df.drop(["marketLot", "activeSeries"], axis=1, inplace=True)
+    trd_df = trd_df.transpose()
+    security_wise_dp_df = pd.DataFrame(security_wise_dp)
+    security_wise_dp_df.drop(["seriesRemarks"], axis=1, inplace=True)
+    security_wise_dp_df = security_wise_dp_df.transpose()
+    try:
+        eq.range("D5").value = "Trade Data"
+        eq.range('D5').font.bold = True
+        eq.range("D6").value = trd_df
+        eq.range("E6").value = None
+        eq.range("F7").value = "Lakhs"
+        eq.range("F8").value = "₹ Cr"
+        eq.range("F9").value = "₹ Cr"
+        eq.range("F10").value = "₹ Cr"
+        eq.range("D15").value = "Delivery Data"
+        eq.range('D15').font.bold = True
+        eq.range("D16").value = security_wise_dp_df
+        eq.range("E16").value = None
+        eq.range("F19").value = "%"
+        eq.range("D22").value = "Bid/Ask"
+        eq.range('D22').font.bold = True
+        eq.range("D23").options(pd.DataFrame, index=False).value = bid_ask_df
+        eq.range("D29").value = "TotalBuyQty"
+        eq.range("E29").value = tot_buy
+        eq.range("F29").value = "TotalSellQty"
+        eq.range("G29").value = tot_sell
+        ret = True
+    except Exception as e:
+        logger.error(f'Error printing trading info df - {e}')
+        ret = False
+    
+    return ret
+############################# End - Function to print equity info ############ 
+
 while True:
     time.sleep(1)
     ############################# OptionChain Starts #############################
@@ -781,9 +860,9 @@ while True:
     except Exception as e:
         logger.debug(f'Closing Excel and handling exception - {e}')
         sys.exit()
-    if pre_ind_sym != ind_sym:
+    if pre_ind_sym is not None and pre_ind_sym != ind_sym:
         eq_sym = None
-        eq.range("I1:AE510").value = eq.range("D5:H30").value = None
+        eq.range("I1:AE510").value = eq.range("D5:H39").value = None
         eq.range("E1").value = eq.range("G1").value = None
         eq.range("E3").value = eq.range("G2").value = None
         sv.clear()
@@ -811,8 +890,8 @@ while True:
         prev_cum_vol_diff_dict = {}
         price_vol_dict_flag = False
 
-    if pre_eq_sym != eq_sym:
-        eq.range("D5:H30").value = None
+    if pre_eq_sym is not None and pre_eq_sym != eq_sym:
+        eq.range("D5:H39").value = None
         eq.range("G3").value = None
     pre_ind_sym = ind_sym
     pre_eq_sym = eq_sym
@@ -822,7 +901,7 @@ while True:
         if eq_df is not None:
             eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series","identifier"],
                        axis=1,inplace=True)
-            eq_df.index.name = 'symbol'            
+            eq_df.index.name = 'symbol'
             sorted_idx = eq_df.index.sort_values()
             eq_df = eq_df.loc[sorted_idx]
             rows_eq_df = len(eq_df.index)
@@ -833,6 +912,7 @@ while True:
                 eq.range("G2").value = eq_df.loc[ind_sym,'lastPrice']
                 eq.range("G1").value = eq_df.iloc[0]['lastUpdateTime']
                 curr_time = eq.range("G1").value
+                print_top_gainers_loosers(eq_df)
                 if prev_time_2 != None and curr_time != None and prev_time_2 != curr_time:
                     duration_1 = curr_time - prev_time_2
                 if row_number == 1 or (row_number > 1 and duration_1 is not None and duration_1.total_seconds()/60 > DELIVERY_CHANGE_DURATION):
@@ -846,52 +926,8 @@ while True:
             if eq_sym is not None:                
                 data = nse.equity_info(eq_sym, trade_info=True)
                 if data is not None:
-                    #bid_list = ask_list = trd_data = []
-                    bid_list = ask_list = []
-                    trd_data = []
-                    security_wise_dp = []
-                    tot_buy = tot_sell = 0
-                    eq.range("G3").value = eq_df.loc[eq_sym,'lastPrice']
-                    for key,value in data.items():
-                        if str(key) == "marketDeptOrderBook":
-                            for k,v in value.items():
-                                if str(k) == "bid":
-                                    bid_list = v
-                                elif str(k) == "ask":
-                                    ask_list = v
-                                elif str(k) == "tradeInfo":
-                                    trd_data.append(v)
-                                elif str(k) == "totalBuyQuantity":
-                                    tot_buy = v
-                                elif str(k) == "totalSellQuantity":
-                                    tot_sell = v
-                        elif str(key) == "securityWiseDP":
-                            security_wise_dp.append(value)
-
-                    bid_df = pd.DataFrame(bid_list)
-                    bid_df.rename(columns={"price":"Bid Price","quantity":"Bid Quantity"},inplace=True)
-                    ask_df = pd.DataFrame(ask_list)
-                    ask_df.rename(columns={"price":"Ask Price","quantity":"Ask Quantity"},inplace=True) 
-                    bid_ask_df = pd.concat([bid_df,ask_df], axis=1)
-                    trd_df = pd.DataFrame(trd_data).transpose()
-                    security_wise_dp_df = pd.DataFrame(security_wise_dp).transpose()
-                    try:
-                        eq.range("D5").value = trd_df
-                        eq.range("E5").value = None
-                        eq.range("F6").value = "Lakhs"
-                        eq.range("F7").value = "₹ Cr"
-                        eq.range("F8").value = "₹ Cr"
-                        eq.range("F9").value = "₹ Cr"
-                        eq.range("D15").value = security_wise_dp_df
-                        eq.range("E15").value = None
-                        eq.range("F18").value = "%"
-                        eq.range("D22").options(pd.DataFrame, index=False).value = bid_ask_df
-                        eq.range("D28").value = "TotalBuyQty"
-                        eq.range("E28").value = tot_buy
-                        eq.range("F28").value = "TotalSellQty"
-                        eq.range("G28").value = tot_sell
-                    except Exception as e:
-                        logger.error(f'Error printing trading info df - {e}')
+                    ret_val = print_equity_info(eq_df, data, eq_sym)
+                    if not ret_val:
                         continue
                 else:
                     logger.error(f'Error getting Equity Info for {eq_sym} - Equity Info Data is Null')
