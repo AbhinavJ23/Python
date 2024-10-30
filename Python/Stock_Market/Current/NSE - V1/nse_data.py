@@ -113,16 +113,17 @@ ONE_CRORE = 10000000
 CUMULATIVE_TURNOVER_DURATION = 5 #Mins
 CUMULATIVE_TURNOVER = 100000000
 MARKET_OPEN_DURATION = 375 #Mins
-RISK_FREE_INT_RATE = 0.05
-DELIVERY_CHANGE_DURATION = 60
+DELIVERY_CHANGE_DURATION = 30 #Mins
+RISK_FREE_INT_RATE = 5 #Percent
+OPTION_PCR_DURATION = 5 #Mins
 
 ####################### Initializing Excel Sheets #######################
 oc.range('1:1').font.bold = True
 oc.range('1:1').color = COLOR_GREY
 oc.range('C1:C200').color = COLOR_GREY
-oc.range('G1:G500').color = COLOR_GREY
+oc.range('H1:H500').color = COLOR_GREY
 oc.range('C1').column_width = 2
-oc.range('G1').column_width = 2
+oc.range('H1').column_width = 2
 eq.range('1:1').font.bold = True
 eq.range('1:1').color = COLOR_GREY
 eq.range('B1:C40').color = COLOR_GREY
@@ -142,6 +143,9 @@ fd.range('H1:H1000').color = COLOR_GREY
 cfg.range('D1').value = "IMPORTANT! BEFORE GIVING VALUES IN OTHER SHEETS, USE THIS SHEET TO CHECK CONFIGURATIONS. ADD/MODIFY IF REQUIRED."
 cfg.range('D1').font.bold = True
 cfg.range('A1:CZ1').color = COLOR_GREY
+cfg.range('A2').value = "EQUITY"
+cfg.range('A2').font.bold = True
+cfg.range('A2').color = COLOR_YELLOW
 cfg.range('A3').value = "Cumulative Turnover"
 cfg.range('A3').font.bold = True
 cfg.range('B3').value = CUMULATIVE_TURNOVER/ONE_CRORE
@@ -158,10 +162,23 @@ cfg.range('A7').value = "Support"
 cfg.range('A7').font.bold = True
 cfg.range('A8').value = "Resistance"
 cfg.range('A8').font.bold = True
+cfg.range('A11:CZ11').color = COLOR_GREY
+cfg.range('A12').value = "OPTIONS"
+cfg.range('A12').font.bold = True
+cfg.range('A12').color = COLOR_YELLOW
+cfg.range('A13').value = "Option PCR Duration"
+cfg.range('A13').font.bold = True
+#cfg.range("A13").autofit()
+cfg.range('B13').value = OPTION_PCR_DURATION
+cfg.range('C13').value = "Mins"
+cfg.range('A14').value = "Risk Free Interest Rate"
+cfg.range('A14').font.bold = True
+cfg.range('B14').value = RISK_FREE_INT_RATE
+cfg.range('C14').value = "%"
 logger.debug("Configurations sheet initialized")
 
 ####################### Initializing OptionChain sheet #######################
-oc.range("A:B").value = oc.range("D6:E19").value = oc.range("G1:V4000").value = None
+oc.range("A:B").value = oc.range("D6:E19").value = oc.range("H1:V4000").value = None
 oc_df = None
 oc_df= pd.DataFrame({"FNO Symbol":["NIFTY", "BANKNIFTY"] + nse.equity_market_data("Securities in F&O", symbol_list=True)})
 if oc_df is not None:
@@ -179,8 +196,17 @@ oc.range('D2').font.bold = True
 oc.range('D3').font.bold = True
 oc.range("D2:E3").autofit()
 oc.range('A200:B200').color = COLOR_GREY
-oc.range('D20:F20').color = COLOR_GREY
+oc.range('D20:G20').color = COLOR_GREY
 oc.range("D1").value = "Current Time"
+oc.range("F21").value = "Nearest Spot"
+oc.range('F21').font.bold = True
+oc.range('F21:G21').merge()
+oc.range("E22").value = "PCR"
+oc.range('E22').font.bold = True
+oc.range("F22").value = "PE OI"
+oc.range('F22').font.bold = True
+oc.range("G22").value = "CE OI"
+oc.range('G22').font.bold = True
 pre_oc_sym = pre_oc_exp = None
 exp_list = []
 logger.debug("OptionChain sheet initialized")
@@ -254,6 +280,13 @@ cum_vol_diff_dict = {}
 prev_cum_vol_diff_dict = {}
 price_vol_dict_flag = False
 initial_len_eq_df = 0
+option_prev_time = None
+option_curr_time = None
+option_row_number = 1
+option_duration = None
+prev_pcr = None
+pcr = None
+#pcr_print_flag = False
 
 ############################# Start - Function to get excel column(A1,B1 etc) given a positive number #############################
 alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -305,6 +338,23 @@ def get_option_greeks(df, call_or_put, expiry):
     greek_df = pd.DataFrame(greek_list, index=df.index)
     return greek_df
 ############################# End - Function to get option greeks #############################
+
+############################# Start - Function to get option OI #############################
+def get_option_oi(df, call_or_put, spot_ltp):
+    logger.debug('Function get_option_oi')
+    oi = None
+    for i, row in df.iterrows():
+        strike = i
+        if strike > spot_ltp:
+            if call_or_put == 'c':
+                oi = row['CE OI']
+            elif call_or_put == 'p':
+                oi = row['PE OI']
+            break
+        else:
+            logger.debug(f'Function get_option_oi - ignoring strike {strike}')
+    return oi
+############################# End - Function to get option OI #############################
 
 ############################# Start - Function to get delivery info ###########################
 def get_delivery_info(df):
@@ -750,11 +800,14 @@ while True:
     ############################# OptionChain Starts #############################
     try:
         oc_sym, oc_exp = oc.range("E2").value, oc.range("E3").value
+        OPTION_PCR_DURATION = cfg.range('B13').value
+        RISK_FREE_INT_RATE = cfg.range('B14').value
+        RISK_FREE_INT_RATE = RISK_FREE_INT_RATE/100
     except Exception as e:
         logger.debug(f'Closing Excel and handling exception - {e}')
         sys.exit()  
     if pre_oc_sym != oc_sym or pre_oc_exp != oc_exp:
-        oc.range("G1:AD4000").value = None
+        oc.range("H1:AD4000").value = None
         if pre_oc_sym != oc_sym:
             oc.range("B:B").value = oc.range("D6:E19").value = None
             exp_list = []
@@ -838,7 +891,31 @@ while True:
                                         list(df[df["PE Change in OI"] == max(list(df["PE Change in OI"]))]["Strike"])[0]]
                                         ]
                 oc.range("E1").value = timestamp
-                oc.range("G1").value = df
+                option_curr_time = oc.range("E1").value
+                oc.range("H1").value = df
+                if option_prev_time != None and option_curr_time != None and option_prev_time != option_curr_time:
+                    option_duration = option_curr_time - option_prev_time
+                    #pcr_print_flag = False
+                if option_row_number == 1 or (option_row_number > 1 and option_duration is not None and option_duration.total_seconds()/60 >= OPTION_PCR_DURATION):
+                    oc.range(f'D{option_row_number + 22}').value = option_curr_time.strftime('%H:%M:%S')
+                    oc.range(f'D{option_row_number + 22}').font.bold = True
+                    pcr = sum(list(df["PE OI"]))/sum(list(df["CE OI"]))
+                    oc.range(f'E{option_row_number + 22}').value = pcr
+                    pe_oi = get_option_oi(pe_df, 'p', underlying_value)
+                    ce_oi = get_option_oi(ce_df, 'c', underlying_value)
+                    oc.range(f'F{option_row_number + 22}').value = pe_oi
+                    oc.range(f'G{option_row_number + 22}').value = ce_oi
+                    if prev_pcr is not None:
+                        if pcr > prev_pcr:
+                            oc.range(f'E{option_row_number + 22}').color = COLOR_GREEN
+                        elif pcr < prev_pcr:
+                            oc.range(f'E{option_row_number + 22}').color = COLOR_RED
+                        else:
+                            oc.range(f'E{option_row_number + 22}').color = COLOR_YELLOW
+                    prev_pcr = pcr
+                    option_prev_time = option_curr_time
+                    option_row_number += 1
+                    option_duration = None
             except Exception as e:
                 logger.error(f'Error printing values - {e}')
                 continue
@@ -915,7 +992,7 @@ while True:
                 print_top_gainers_loosers(eq_df)
                 if prev_time_2 != None and curr_time != None and prev_time_2 != curr_time:
                     duration_1 = curr_time - prev_time_2
-                if row_number == 1 or (row_number > 1 and duration_1 is not None and duration_1.total_seconds()/60 > DELIVERY_CHANGE_DURATION):
+                if row_number == 1 or (row_number > 1 and duration_1 is not None and duration_1.total_seconds()/60 >= DELIVERY_CHANGE_DURATION):
                     eq.range("AB1").options(index=False).value = get_delivery_info(eq_df)
                     prev_time_2 = curr_time
             except Exception as e:
