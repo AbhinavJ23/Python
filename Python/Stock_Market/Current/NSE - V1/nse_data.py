@@ -17,7 +17,7 @@ if getattr(sys, 'frozen', False):
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '14/10/2024 00:00:00'
+    valid_from_str = '18/12/2024 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S') 
     valid_till_time = valid_from_time + timedelta(days=30)
     time_now = datetime.now()
@@ -74,6 +74,7 @@ file_name = 'Nse_Data_'+time.strftime('%Y%m%d%H%M%S')+'.xlsx'
 if not os.path.exists(file_name):
     try:
         wb = xw.Book()
+        wb.sheets.add("PriceVolumeDirectionDown")
         wb.sheets.add("PriceVolumeDirection")
         wb.sheets.add("MaxVolumeTurnover")
         wb.sheets.add("SpotTurnover")
@@ -99,6 +100,7 @@ sv = wb.sheets("SpotVolume")
 st = wb.sheets("SpotTurnover")
 mv = wb.sheets("MaxVolumeTurnover")
 pv = wb.sheets("PriceVolumeDirection")
+pvd = wb.sheets("PriceVolumeDirectionDown")
 
 ####################### Initializing Constants #######################
 COLOR_GREY = (211, 211, 211)
@@ -198,7 +200,7 @@ oc.range("D2:E3").autofit()
 oc.range('A200:B200').color = COLOR_GREY
 oc.range('D20:G20').color = COLOR_GREY
 oc.range("D1").value = "Current Time"
-oc.range("F21").value = "Nearest Spot"
+oc.range("F21").value = "Maximum"
 oc.range('F21').font.bold = True
 oc.range('F21:G21').merge()
 oc.range("E22").value = "PCR"
@@ -607,29 +609,38 @@ def create_max_sheet(sh_type,time,duration,row_number,col_number_1,vol_list,turn
 
 ############################# Start - Function to compare Cumulative Price, Volume difference after every set duration ############
 ############################# Also print the direction (Up,Down) for each stock #########################################
-def create_price_vol_sheet(df, time, row_number_1):
-    logger.debug(f'Printing PriceVolumeDirection Sheet for {time} and row {row_number_1}')
+def create_price_vol_sheets(df, time, row_number_1):
+    logger.debug(f'Printing PriceVolumeDirection Sheets for {time} and row {row_number_1}')
     logger.debug(f'prev_cum_price_diff_dict - {prev_cum_price_diff_dict} and prev_cum_vol_diff_dict - {prev_cum_vol_diff_dict}')
     logger.debug(f'cum_price_diff_dict - {cum_price_diff_dict} and cum_vol_diff_dict - {cum_vol_diff_dict}')
     col_number_2 = 2
     price_vol_up_list = []
+    price_vol_down_list = []
     row_difference = int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 2
     temp_row_number = row_number_1 + row_difference
     if row_number_1 == 2:
         pv.range(f'A{temp_row_number}' + ':' + f'DZ{temp_row_number}').color = COLOR_GREY
         pv.range(f'A{temp_row_number + row_difference}' + ':' + f'DZ{temp_row_number + row_difference}').color = COLOR_GREY
+        pvd.range(f'A{temp_row_number}' + ':' + f'DZ{temp_row_number}').color = COLOR_GREY
         pv.range(f'A{row_number_1}').value = time
-        pv.range(f'A{row_number_1}').font.bold = True
-        pv.range(f'A{temp_row_number+1}').value = "Price Up,Volume Up"
-        pv.range(f'A{temp_row_number + row_difference+1}').value = "Filtered Stocks"
+        #pv.range(f'A{row_number_1}').font.bold = True
+        pv.range(f'A{temp_row_number+1}').value = "Price Up,Volume Up List"
+        pv.range(f'A{temp_row_number + row_difference+1}').value = "Filtered Stocks - As per Price Up Volume Up and Configuration"
+        pvd.range(f'A{row_number_1 - 1}').value = "Price Down,Volume Down List"
+        pvd.range(f'A{temp_row_number+1}').value = "Filtered Stocks - As per Price Down Volume Down and Configuration"
     else:
         pv.range(f'A{row_number_1}').value = time.strftime('%H:%M:%S')
-        pv.range(f'A{row_number_1}').font.bold = True
+        #pv.range(f'A{row_number_1}').font.bold = True
         pv.range(f'A{temp_row_number + 1}').value = time.strftime('%H:%M:%S')
         pv.range(f'A{temp_row_number + row_difference + 1}').value = time.strftime('%H:%M:%S')
+        pvd.range(f'A{row_number_1 - 1}').value = time.strftime('%H:%M:%S')
+        pvd.range(f'A{temp_row_number + 1}').value = time.strftime('%H:%M:%S')
 
+    pv.range(f'A{row_number_1}').font.bold = True
     pv.range(f'A{temp_row_number + 1}').font.bold = True
     pv.range(f'A{temp_row_number + row_difference + 1}').font.bold = True
+    pvd.range(f'A{row_number_1 - 1}').font.bold = True
+    pvd.range(f'A{temp_row_number + 1}').font.bold = True
 
     for key in cum_price_diff_dict:
         if row_number_1 == 2:       
@@ -669,6 +680,9 @@ def create_price_vol_sheet(df, time, row_number_1):
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_RED
                 pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Down"
                 pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_RED
+                #Building Data for Price Down, Volume Down
+                price_vol_down_list.append(key)
+
             elif (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) < 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) > 0:
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Down"
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_RED
@@ -681,7 +695,6 @@ def create_price_vol_sheet(df, time, row_number_1):
                 pv.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_CYAN
                 #Building Data for Price Up, Volume Up
                 price_vol_up_list.append(key)
-
             elif (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) > 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) < 0:
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Up"
                 pv.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_GREEN
@@ -691,28 +704,45 @@ def create_price_vol_sheet(df, time, row_number_1):
                 logger.debug("Scenario not handled")
         col_number_2 += 2
 
-    #Printing Stocks for which Price and Volume are Up, along with subsequent filtering as per Support and Resistance.
+    #Printing Stocks for which Price and Volume are Up/Down, along with subsequent filtering as per Support and Resistance.
     if row_number_1 > 2:
         pv.range(f'B{temp_row_number + 1}').value = price_vol_up_list
+        pvd.range(f'B{row_number_1 - 1}').value = price_vol_down_list
         temp_df = get_equity_config_df()
         temp_col_number = 2
+        temp_col_number_1 = 2
         if temp_df is not None:
             for idx in temp_df.index:
                 if idx in price_vol_up_list:
                     logger.debug(f'Configured Equity {idx} is in Price Up,Volume Up list')
                     pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference + 1)).value = idx
-                    if eq_df.loc[idx, 'lastPrice'] >= temp_df.loc[idx, 'Resistance']:
+                    if df.loc[idx, 'lastPrice'] >= temp_df.loc[idx, 'Resistance']:
                         logger.debug("Equity price is greater than or equal to configured Resistance")
                         pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference + 1)).color = COLOR_GREEN
-                    elif eq_df.loc[idx, 'lastPrice'] <= temp_df.loc[idx, 'Support']:
+                    elif df.loc[idx, 'lastPrice'] <= temp_df.loc[idx, 'Support']:
                         logger.debug("Configured Equity price is less than or equal to configured Support")
                         pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference + 1)).color = COLOR_RED
                     else:
                         logger.debug("Configured Equity price is with-in Resistance and Support")
                         pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference +1 )).color = COLOR_YELLOW
                     temp_col_number += 1
+                elif idx in price_vol_down_list:
+                    logger.debug(f'Configured Equity {idx} is in Price Down,Volume Down list')
+                    pvd.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1)).value = idx
+                    if eq_df.loc[idx, 'lastPrice'] >= temp_df.loc[idx, 'Resistance']:
+                        logger.debug("Equity price is greater than or equal to configured Resistance")
+                        pvd.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1)).color = COLOR_GREEN
+                    elif eq_df.loc[idx, 'lastPrice'] <= temp_df.loc[idx, 'Support']:
+                        logger.debug("Configured Equity price is less than or equal to configured Support")
+                        pvd.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1)).color = COLOR_RED
+                    else:
+                        logger.debug("Configured Equity price is with-in Resistance and Support")
+                        pvd.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1 )).color = COLOR_YELLOW
+                    temp_col_number_1 += 1
+                else:
+                    logger.debug(f'Configured Equity {idx} is neither in Price Up,Volume Up nor in Price Down,Volume Down list')
         else:
-            logger.debug("Function create_price_vol_sheet, Equity Config df is None")
+            logger.debug("Function create_price_vol_sheets, Equity Config df is None")
 
 ############################# End - Function to compare Cumulative Price, Volume difference after every set duration ############ 
 
@@ -901,8 +931,10 @@ while True:
                     oc.range(f'D{option_row_number + 22}').font.bold = True
                     pcr = sum(list(df["PE OI"]))/sum(list(df["CE OI"]))
                     oc.range(f'E{option_row_number + 22}').value = pcr
-                    pe_oi = get_option_oi(pe_df, 'p', underlying_value)
-                    ce_oi = get_option_oi(ce_df, 'c', underlying_value)
+                    #pe_oi = get_option_oi(pe_df, 'p', underlying_value)
+                    #ce_oi = get_option_oi(ce_df, 'c', underlying_value)
+                    pe_oi = max(list(df["PE OI"]))
+                    ce_oi = max(list(df["CE OI"]))
                     oc.range(f'F{option_row_number + 22}').value = pe_oi
                     oc.range(f'G{option_row_number + 22}').value = ce_oi
                     if prev_pcr is not None:
@@ -1036,7 +1068,7 @@ while True:
                     col_number_1 += 2
                     prev_time_1 = curr_time
                     cum_turn_dict = {}
-                    create_price_vol_sheet(eq_df, curr_time, row_number_1)
+                    create_price_vol_sheets(eq_df, curr_time, row_number_1)
                     prev_cum_price_diff_dict = cum_price_diff_dict
                     cum_price_diff_dict = {}
                     prev_cum_vol_diff_dict = cum_vol_diff_dict

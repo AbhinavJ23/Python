@@ -222,4 +222,26 @@ class NSE:
                 logger.error(f'Function options_data - Decoding JSON has failed - {e}')
                 return None
         else:
-            return None   
+            return None
+        
+    def historical_data_equity(self, symbol, series, start_date, end_date):
+        symbol = symbol.replace(' ', '%20').replace('&', '%26')
+        url = 'https://www.nseindia.com/api/historical/cm/equity?symbol=' + symbol + '&series=["' + series + '"]&from=' + start_date + '&to=' + end_date
+        print(url)
+        try:
+            response = self.session.get(url, headers=self.headers)
+            response.raise_for_status()
+        except (requests.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError, 
+                requests.ConnectionError, requests.exceptions.HTTPError) as e:
+            logger.error(f'Function historical_data_equity - Error - {e}')
+            return None
+        if response.status_code != 401:
+            try:
+                json_data = response.json()
+                df = pd.DataFrame.from_records(json_data["data"])
+                return df
+            except (requests.JSONDecodeError,requests.exceptions.JSONDecodeError,ValueError,KeyError) as e:
+                logger.error(f'Function  historical_data_equity - Decoding JSON has failed - {e}')
+                return None
+        else:
+            return None
