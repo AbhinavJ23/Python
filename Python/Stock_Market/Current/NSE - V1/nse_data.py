@@ -17,8 +17,8 @@ if getattr(sys, 'frozen', False):
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '18/12/2024 00:00:00'
-    valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S') 
+    valid_from_str = '28/06/2025 00:00:00'
+    valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     valid_till_time = valid_from_time + timedelta(days=30)
     time_now = datetime.now()
     time_left = valid_till_time - time_now
@@ -289,6 +289,7 @@ option_duration = None
 prev_pcr = None
 pcr = None
 #pcr_print_flag = False
+price_vol_dir_supp_res_df = None #pd.DataFrame(columns=['PUVU_RES','PUVU_SUP','PDVD_RES','PDVD_SUP'])
 
 ############################# Start - Function to get excel column(A1,B1 etc) given a positive number #############################
 alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -442,7 +443,7 @@ def create_spot_sheets(df,sh_type,time,duration,row_number,prev_spot,curr_spot,p
     turn_list = []
     global cum_price_diff_dict
     global cum_vol_diff_dict
-    global price_vol_dict_flag   
+    global price_vol_dict_flag
     for col_name in spot_df1:
         spot_value = spot_df1[col_name].values
         if spot_value is None:
@@ -606,7 +607,23 @@ def create_max_sheet(sh_type,time,duration,row_number,col_number_1,vol_list,turn
                 mv.range(f'{get_col_name(col_number_1+5)}' + '2').autofit()
                 logger.debug('Cumulative turonver printed')
 ############################# End - Function to print max volume and max turnover ############
+#'PUVU_RES','PUVU_SUP','PDVD_RES','PDVD_SUP'
 
+def validate_buy_sell(df1, df2, list1, list2):
+    for idx in df1.index:
+        if idx in list1:
+            if df1.loc[idx, 'lastPrice'] >= df2.loc[idx, 'PUVU_RES']:
+                logger.debug(f'Price Up, Volume Up - Current Equity price of {idx} is greater than or equal to last price')
+            elif df1.loc[idx, 'lastPrice'] <= df2.loc[idx, 'PUVU_SUP']:
+                logger.debug(f'Price Up, Volume Up - Current Equity price of {idx} is less than or equal to last price')
+        elif idx in list2:
+            if df1.loc[idx, 'lastPrice'] >= df2.loc[idx, 'PDVD_RES']:
+                logger.debug(f'Price Down, Volume Down - Current Equity price of {idx} is greater than or equal to last price')
+            elif df1.loc[idx, 'lastPrice'] <= df2.loc[idx, 'PDVD_SUP']:
+                logger.debug(f'Price Down, Volume Down - Current Equity price of {idx} is less than or equal to last price')
+        else:
+            logger.debug('Not Expected to reach here')
+        
 ############################# Start - Function to compare Cumulative Price, Volume difference after every set duration ############
 ############################# Also print the direction (Up,Down) for each stock #########################################
 def create_price_vol_sheets(df, time, row_number_1):
@@ -616,6 +633,7 @@ def create_price_vol_sheets(df, time, row_number_1):
     col_number_2 = 2
     price_vol_up_list = []
     price_vol_down_list = []
+    global price_vol_dir_supp_res_df
     row_difference = int(MARKET_OPEN_DURATION/CUMULATIVE_TURNOVER_DURATION) + 2
     temp_row_number = row_number_1 + row_difference
     if row_number_1 == 2:
@@ -712,6 +730,11 @@ def create_price_vol_sheets(df, time, row_number_1):
         temp_col_number = 2
         temp_col_number_1 = 2
         if temp_df is not None:
+            #temp_list = []
+            if row_number_1 > 3 and price_vol_dir_supp_res_df is not None:
+                #validate_buy_sell(temp_df, price_vol_dir_supp_res_df, price_vol_up_list, price_vol_down_list)
+                price_vol_dir_supp_res_df = None
+            price_vol_dir_supp_res_df = pd.DataFrame(index=temp_df.index, columns=['PUVU_RES','PUVU_SUP','PDVD_RES','PDVD_SUP'])
             for idx in temp_df.index:
                 if idx in price_vol_up_list:
                     logger.debug(f'Configured Equity {idx} is in Price Up,Volume Up list')
@@ -719,25 +742,32 @@ def create_price_vol_sheets(df, time, row_number_1):
                     if df.loc[idx, 'lastPrice'] >= temp_df.loc[idx, 'Resistance']:
                         logger.debug("Equity price is greater than or equal to configured Resistance")
                         pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference + 1)).color = COLOR_GREEN
+                        #temp_list.append([df.loc[idx, 'lastPrice'],'NA','NA','NA'])
+                        price_vol_dir_supp_res_df.loc[idx] = [df.loc[idx, 'lastPrice'],'NA','NA','NA']
                     elif df.loc[idx, 'lastPrice'] <= temp_df.loc[idx, 'Support']:
                         logger.debug("Configured Equity price is less than or equal to configured Support")
                         pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference + 1)).color = COLOR_RED
+                        price_vol_dir_supp_res_df.loc[idx] = ['NA',df.loc[idx, 'lastPrice'],'NA','NA']
                     else:
                         logger.debug("Configured Equity price is with-in Resistance and Support")
                         pv.range(f'{get_col_name(temp_col_number)}' + str(temp_row_number + row_difference +1 )).color = COLOR_YELLOW
+                        price_vol_dir_supp_res_df.loc[idx] = ['NA','NA','NA','NA']
                     temp_col_number += 1
                 elif idx in price_vol_down_list:
                     logger.debug(f'Configured Equity {idx} is in Price Down,Volume Down list')
                     pvd.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1)).value = idx
-                    if eq_df.loc[idx, 'lastPrice'] >= temp_df.loc[idx, 'Resistance']:
+                    if df.loc[idx, 'lastPrice'] >= temp_df.loc[idx, 'Resistance']:
                         logger.debug("Equity price is greater than or equal to configured Resistance")
                         pvd.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1)).color = COLOR_GREEN
-                    elif eq_df.loc[idx, 'lastPrice'] <= temp_df.loc[idx, 'Support']:
+                        price_vol_dir_supp_res_df.loc[idx] = ['NA','NA',df.loc[idx, 'lastPrice'],'NA']
+                    elif df.loc[idx, 'lastPrice'] <= temp_df.loc[idx, 'Support']:
                         logger.debug("Configured Equity price is less than or equal to configured Support")
                         pvd.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1)).color = COLOR_RED
+                        price_vol_dir_supp_res_df.loc[idx] = ['NA','NA','NA',df.loc[idx, 'lastPrice']]
                     else:
                         logger.debug("Configured Equity price is with-in Resistance and Support")
                         pvd.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1 )).color = COLOR_YELLOW
+                        price_vol_dir_supp_res_df.loc[idx] = ['NA','NA','NA','NA']
                     temp_col_number_1 += 1
                 else:
                     logger.debug(f'Configured Equity {idx} is neither in Price Up,Volume Up nor in Price Down,Volume Down list')
@@ -1021,6 +1051,8 @@ while True:
                 eq.range("G2").value = eq_df.loc[ind_sym,'lastPrice']
                 eq.range("G1").value = eq_df.iloc[0]['lastUpdateTime']
                 curr_time = eq.range("G1").value
+                if curr_time is None:
+                    curr_time = eq.range("E1").value
                 print_top_gainers_loosers(eq_df)
                 if prev_time_2 != None and curr_time != None and prev_time_2 != curr_time:
                     duration_1 = curr_time - prev_time_2

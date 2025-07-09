@@ -63,12 +63,12 @@ class Login:
 
     def hash_password(self, pwd):
         salt = "UOHsUstBs+W+DleuSQ8vSw=="
-        logger.debug(f'Salt is - {salt}')
+        #logger.debug(f'Salt is - {salt}')
         #salted_pwd = password + str(base64.b64encode(salt))
         salted_pwd = pwd + salt
-        logger.debug(f'Salted pwd is - {salted_pwd}')
+        #logger.debug(f'Salted pwd is - {salted_pwd}')
         hashed_pwd = hashlib.sha256(salted_pwd.encode()).hexdigest()
-        logger.debug(f'Hashed pwd is - {hashed_pwd}')
+        #logger.debug(f'Hashed pwd is - {hashed_pwd}')
         return hashed_pwd
 
     def valid_user(self, user_id):
@@ -189,9 +189,9 @@ class Login:
         #with open('users.json') as cfg:
         #    data = json.load(cfg)
         data = Users.user_data
-        logger.debug(data)
+        #logger.debug(data)
         logger.debug(f'System - {self.system}')
-        logger.debug(f'Node - {self.node}')
+        #logger.debug(f'Node - {self.node}')
         
         input_user_id = self.user_id.get()
         input_password = self.user_pass.get()
@@ -223,7 +223,7 @@ class Login:
             record = self.cursor.fetchone()
             if record:
                 db_password = record[0]
-                logger.debug(f'Password retrieved is - {db_password}')
+                #logger.debug(f'Password retrieved is - {db_password}')
             else:
                 logger.debug("User Id does not exist, register first")
                 tkmb.showerror(title="Error",message="Please check if you have registerd")
