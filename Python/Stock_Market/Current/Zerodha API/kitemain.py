@@ -1,6 +1,7 @@
 from kitelogin import KiteLogin
 from kiteconnect import KiteConnect
 import pandas as pd
+from baselogger import logger
 
 class KiteMain:
     equity_market_categories = ['NIFTY 50', 'NIFTY NEXT 50', 'NIFTY 100', 'NIFTY 200', 'NIFTY 500', 'NIFTY MIDCAP 50', 'NIFTY MIDCAP 100', 'NIFTY SMALLCAP 100', 'NIFTY SMALLCAP 50', 'NIFTY SMALLCAP 250', 'NIFTY TOTAL MARKET', 'NIFTY BANK', 'NIFTY AUTO', 'NIFTY FMCG', 'NIFTY IT', 'NIFTY METAL', 'NIFTY PHARMA', 'NIFTY PSU BANK', 'NIFTY PRIVATE BANK', 'NIFTY REALTY', 'NIFTY HEALTHCARE INDEX', 'NIFTY CONSUMER DURABLES', 'NIFTY OIL & GAS']
@@ -36,7 +37,7 @@ class KiteMain:
             for sym in nifty50_symbols:
                 market_data.append(self.kite.quote(sym)[sym])
         except Exception as e:
-            print(f"Error getting market data: {e}")
+            logger.error(f"Error getting market data: {e}")
             return None
 
         # Prepare market data dictionary
@@ -65,7 +66,7 @@ class KiteMain:
             market_data_dict['close'].append(data['ohlc']['close'])
             market_data_dict['last_price'].append(data['last_price'])
             market_data_dict['change'].append(data['last_price'] - data['ohlc']['close'])
-            market_data_dict['percent_change'].append(round(((data['last_price'] - data['ohlc']['close']) / data['ohlc']['close']) * 100))
+            market_data_dict['percent_change'].append(round(((data['last_price'] - data['ohlc']['close']) / data['ohlc']['close']) * 100, 2))
             market_data_dict['timestamp'].append(data.get('timestamp', None))
             if nifty50_symbols[counter] != 'NSE:NIFTY 50':
                 market_data_dict['buy_quantity'].append(data['buy_quantity'])
@@ -81,5 +82,5 @@ class KiteMain:
 
         market_data_df = pd.DataFrame(market_data_dict)
         market_data_df.set_index('symbol', inplace=True)
-        #print(market_data_df)
+        #logger.debug(market_data_df)
         return market_data_df

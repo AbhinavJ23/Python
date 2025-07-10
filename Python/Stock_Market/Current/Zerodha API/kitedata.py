@@ -94,7 +94,7 @@ eq = wb.sheets("EquityData")
 mv = wb.sheets("MaxVolumeTurnover")
 puvu = wb.sheets("PriceUpVolumeUp")
 pdvd = wb.sheets("PriceDownVolumeDown")
-puvd = wb.sheets("PriceUpVolumeUp")
+puvd = wb.sheets("PriceUpVolumeDown")
 pdvu = wb.sheets("PriceDownVolumeUp")
 
 ####################### Initializing Constants #######################
@@ -755,6 +755,8 @@ def create_price_vol_sheets(df, time, row_number_1):
     if row_number_1 > 2:
         puvu.range(f'B{temp_row_number + 1}').value = price_vol_up_list
         pdvd.range(f'B{row_number_1 - 1}').value = price_vol_down_list
+        puvd.range(f'B{row_number_1 - 1}').value = price_up_vol_down_list
+        pdvu.range(f'B{row_number_1 - 1}').value = price_down_vol_up_list
         temp_df = get_equity_config_df()
         temp_col_number = 2
         temp_col_number_1 = 2
@@ -801,9 +803,11 @@ def create_price_vol_sheets(df, time, row_number_1):
                 elif idx in price_up_vol_down_list:
                     logger.debug(f'Configured Equity {idx} is in Price Up,Volume Down list')
                     puvd.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1)).value = idx
+                    temp_col_number_1 += 1
                 elif idx in price_down_vol_up_list:
                     logger.debug(f'Configured Equity {idx} is in Price Down,Volume Up list')
                     pdvu.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1)).value = idx
+                    temp_col_number_1 += 1
                 else:
                     logger.debug(f'Configured Equity {idx} is not present in any list')
             #logger.debug(f'Price Volume Direction Support Resistance DataFrame - {price_vol_dir_supp_res_df}')
