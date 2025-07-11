@@ -12,8 +12,8 @@ import ctypes
 #from baselogin import Login
 from kitemain import KiteMain
 
-#if getattr(sys, 'frozen', False):
-#    import pyi_splash
+if getattr(sys, 'frozen', False):
+    import pyi_splash
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
@@ -51,8 +51,8 @@ def check_validity():
 
         return True
 ############################# End - Function to check validity,expiry #############################
-#if getattr(sys, 'frozen', False):
-#    pyi_splash.close()
+if getattr(sys, 'frozen', False):
+    pyi_splash.close()
 
 status = check_validity()
 if not status:
@@ -474,9 +474,9 @@ def create_spot_data(df,type,time,duration,row_number,prev_spot,curr_spot,prev_s
                 sh.range(f'A{row_number + 1}').value = time.strftime('%H:%M:%S')
                 sh.range(f'A{row_number + 1}').font.bold = True
             sh.range(f'{get_col_name(col_number)}'+ str(row_number+1)).value = spot_value"""
-            curr_spot.append(spot_value)           
+            curr_spot.append(spot_value)
             if curr_spot[iter] is not None and prev_spot[iter] is not None:
-                val_diff = curr_spot[iter] - prev_spot[iter]        
+                val_diff = curr_spot[iter] - prev_spot[iter]
             else:
                 logger.debug(f'For Time {time} - In {type} data for {col_name},  current value is {curr_spot[iter]} and previous value is {prev_spot[iter]}, hence setting its difference to zero')
                 val_diff = np.zeros(1)
@@ -520,8 +520,8 @@ def create_spot_data(df,type,time,duration,row_number,prev_spot,curr_spot,prev_s
                     #elif per_diff < -MAX_VOLUME_PERCENT_DIFF:
                     #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_RED
 
-                    if per_diff > MAX_VOLUME_PERCENT_DIFF or per_diff < -MAX_VOLUME_PERCENT_DIFF:                        
-                        stock_list.append(col_name)                     
+                    if per_diff > MAX_VOLUME_PERCENT_DIFF or per_diff < -MAX_VOLUME_PERCENT_DIFF:
+                        stock_list.append(col_name)
                         vol_list.append(per_diff)
                     ## Logic for updating cumulative volume difference
                     if price_vol_dict_flag:
@@ -530,10 +530,10 @@ def create_spot_data(df,type,time,duration,row_number,prev_spot,curr_spot,prev_s
                     #if per_diff > MAX_TURNOVER_PERCENT_DIFF:
                     #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_GREEN
                     #elif per_diff < -MAX_TURNOVER_PERCENT_DIFF:
-                    #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_RED                                        
+                    #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_RED
                     temp_val_diff = val_diff/ONE_CRORE
-                    if col_name in stock_list:                                             
-                        turn_list.append(temp_val_diff)                       
+                    if col_name in stock_list:
+                        turn_list.append(temp_val_diff)
                     elif col_name not in kite.equity_market_categories:
                         if val_diff > MAX_TURNOVER_VALUE_DIFF or per_diff > MAX_TURNOVER_PERCENT_DIFF or per_diff < -MAX_TURNOVER_PERCENT_DIFF:
                             stock_list.append(col_name)
@@ -760,6 +760,8 @@ def create_price_vol_sheets(df, time, row_number_1):
         temp_df = get_equity_config_df()
         temp_col_number = 2
         temp_col_number_1 = 2
+        temp_col_number_2 = 2
+        temp_col_number_3 = 2
         if temp_df is not None:
             #temp_list = []
             """if row_number_1 > 3 and price_vol_dir_supp_res_df is not None:
@@ -802,12 +804,12 @@ def create_price_vol_sheets(df, time, row_number_1):
                     temp_col_number_1 += 1
                 elif idx in price_up_vol_down_list:
                     logger.debug(f'Configured Equity {idx} is in Price Up,Volume Down list')
-                    puvd.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1)).value = idx
-                    temp_col_number_1 += 1
+                    puvd.range(f'{get_col_name(temp_col_number_2)}' + str(temp_row_number + 1)).value = idx
+                    temp_col_number_2 += 1
                 elif idx in price_down_vol_up_list:
                     logger.debug(f'Configured Equity {idx} is in Price Down,Volume Up list')
-                    pdvu.range(f'{get_col_name(temp_col_number_1)}' + str(temp_row_number + 1)).value = idx
-                    temp_col_number_1 += 1
+                    pdvu.range(f'{get_col_name(temp_col_number_3)}' + str(temp_row_number + 1)).value = idx
+                    temp_col_number_3 += 1
                 else:
                     logger.debug(f'Configured Equity {idx} is not present in any list')
             #logger.debug(f'Price Volume Direction Support Resistance DataFrame - {price_vol_dir_supp_res_df}')
