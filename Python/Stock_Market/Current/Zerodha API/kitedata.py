@@ -4,7 +4,7 @@ import pandas as pd
 import xlwings as xw
 #import dateutil.parser
 import numpy as np
-import time
+#import time
 from datetime import datetime, timedelta
 from baselogger import logger
 import ctypes
@@ -69,7 +69,7 @@ if not os.path.exists(file_name):
         wb.sheets.add('PriceUpVolumeDown')
         wb.sheets.add("PriceDownVolumeDown")
         wb.sheets.add("PriceUpVolumeUp")
-        wb.sheets.add("MaxVolumeTurnover")
+        wb.sheets.add("CumulativeTurnover")
         #wb.sheets.add("SpotTurnover")
         #wb.sheets.add("SpotVolume")
         #wb.sheets.add("SpotPrice")
@@ -91,7 +91,7 @@ eq = wb.sheets("EquityData")
 #sp = wb.sheets("SpotPrice")
 #sv = wb.sheets("SpotVolume")
 #st = wb.sheets("SpotTurnover")
-mv = wb.sheets("MaxVolumeTurnover")
+ct = wb.sheets("CumulativeTurnover")
 puvu = wb.sheets("PriceUpVolumeUp")
 pdvd = wb.sheets("PriceDownVolumeDown")
 puvd = wb.sheets("PriceUpVolumeDown")
@@ -107,6 +107,9 @@ MAX_VOLUME_PERCENT_DIFF = 500
 MAX_TURNOVER_PERCENT_DIFF = 500
 MAX_TURNOVER_VALUE_DIFF = 50000000
 ONE_CRORE = 10000000
+TEN_CRORE = 100000000
+FIFTY_CRORE = 5000000000
+HUNDRED_CRORE = 10000000000
 CUMULATIVE_TURNOVER_DURATION = 5 #Mins
 CUMULATIVE_TURNOVER = 100000000
 MARKET_OPEN_DURATION = 375 #Mins
@@ -456,168 +459,186 @@ def create_spot_data(df,type,time,duration,row_number,prev_spot,curr_spot,prev_s
     global cum_vol_diff_dict
     global price_vol_dict_flag
     for col_name in spot_df1:
-        spot_value = spot_df1[col_name].values
-        if spot_value is None:
-            logger.debug(f'For Time {time} - In {type} data for {col_name}, value is None, hence setting it to zero')
-            spot_value = np.zeros(1)
-        if row_number == 1:
-            """sh.range(f'{get_col_name(col_number)}' + str(row_number)).options(index=False).value = spot_df1[col_name]            
-            sh.range(f'{get_col_name(col_number+1)}' + str(row_number)).value = "Difference"
-            if type in ("Volume","Turnover"):
-                sh.range(f'{get_col_name(col_number+2)}' + str(row_number)).value = "% Change"
-            if iter == 0:
-                sh.range(f'A{row_number + 1}').value = time
-                sh.range(f'A{row_number + 1}').font.bold = True"""
-            prev_spot.append(spot_value)
-        else:
-            """if iter == 0:                  
-                sh.range(f'A{row_number + 1}').value = time.strftime('%H:%M:%S')
-                sh.range(f'A{row_number + 1}').font.bold = True
-            sh.range(f'{get_col_name(col_number)}'+ str(row_number+1)).value = spot_value"""
-            curr_spot.append(spot_value)
-            if curr_spot[iter] is not None and prev_spot[iter] is not None:
-                val_diff = curr_spot[iter] - prev_spot[iter]
-            else:
-                logger.debug(f'For Time {time} - In {type} data for {col_name},  current value is {curr_spot[iter]} and previous value is {prev_spot[iter]}, hence setting its difference to zero')
-                val_diff = np.zeros(1)
-            if type in ("Volume","Turnover") and val_diff < 0:
-                ## This indicates some data issue
-                logger.warning(f'Potential Data Issue in {type} data!! value diff is {val_diff}')
-                logger.debug(f'For Time {time} - In {type} data for {col_name}, current value {curr_spot[iter]} can not be less than previous value {prev_spot[iter]}. Hence setting difference between current and previous value as zero')
-                val_diff = np.zeros(1)
-            #sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).value = val_diff
-
-            ## First time add to Cumulative Price, Volume difference
-            if not price_vol_dict_flag:
-                if type == "Price":
-                    cum_price_diff_dict.update({col_name:val_diff})
-                elif type == "Volume":
-                    cum_vol_diff_dict.update({col_name:val_diff})
-            if row_number == 2:
-                prev_spot_diff.append(val_diff)
-                """if type == "Price":
-                    if val_diff > 0:
-                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_GREEN
-                    elif val_diff < 0:
-                        sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED"""
-            else:
-                curr_spot_diff.append(val_diff)
+        if col_name not in kite.equity_market_categories:
+            spot_value = spot_df1[col_name].values
+            if spot_value is None:
+                logger.debug(f'For Time {time} - In {type} data for {col_name}, value is None, hence setting it to zero')
+                spot_value = np.zeros(1)
+            if row_number == 1:
+                """sh.range(f'{get_col_name(col_number)}' + str(row_number)).options(index=False).value = spot_df1[col_name]            
+                sh.range(f'{get_col_name(col_number+1)}' + str(row_number)).value = "Difference"
                 if type in ("Volume","Turnover"):
-                    if prev_spot_diff[iter] != 0:
-                        ## Calculate percentage difference only if denominator is not zero
-                        per_diff = ((curr_spot_diff[iter] - prev_spot_diff[iter])*100)/prev_spot_diff[iter]
-                        #sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = per_diff
-                    else:
-                        logger.warning("Division by Zero occurred!!")
-                        logger.debug(f'For Time {time} - Avoiding division by zero in {type} data for {col_name}')
-                        #sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = "NA"
-                        per_diff = np.zeros(1)
-                        #sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_YELLOW
+                    sh.range(f'{get_col_name(col_number+2)}' + str(row_number)).value = "% Change"
+                if iter == 0:
+                    sh.range(f'A{row_number + 1}').value = time
+                    sh.range(f'A{row_number + 1}').font.bold = True"""
+                prev_spot.append(spot_value)
+            else:
+                """if iter == 0:                  
+                    sh.range(f'A{row_number + 1}').value = time.strftime('%H:%M:%S')
+                    sh.range(f'A{row_number + 1}').font.bold = True
+                sh.range(f'{get_col_name(col_number)}'+ str(row_number+1)).value = spot_value"""
+                curr_spot.append(spot_value)
+                if curr_spot[iter] is not None and prev_spot[iter] is not None:
+                    val_diff = curr_spot[iter] - prev_spot[iter]
+                else:
+                    logger.debug(f'For Time {time} - In {type} data for {col_name},  current value is {curr_spot[iter]} and previous value is {prev_spot[iter]}, hence setting its difference to zero')
+                    val_diff = np.zeros(1)
+                if type in ("Volume","Turnover") and val_diff < 0:
+                    ## This indicates some data issue
+                    logger.warning(f'Potential Data Issue in {type} data!! value diff is {val_diff}')
+                    logger.debug(f'For Time {time} - In {type} data for {col_name}, current value {curr_spot[iter]} can not be less than previous value {prev_spot[iter]}. Hence setting difference between current and previous value as zero')
+                    val_diff = np.zeros(1)
+                #sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).value = val_diff
 
-                if type == "Volume":
-                    #if per_diff > MAX_VOLUME_PERCENT_DIFF:
-                    #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_GREEN
-                    #elif per_diff < -MAX_VOLUME_PERCENT_DIFF:
-                    #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_RED
+                ## First time add to Cumulative Price, Volume difference
+                if not price_vol_dict_flag:
+                    if type == "Price":
+                        cum_price_diff_dict.update({col_name:val_diff})
+                    elif type == "Volume":
+                        cum_vol_diff_dict.update({col_name:val_diff})
+                if row_number == 2:
+                    prev_spot_diff.append(val_diff)
+                    """if type == "Price":
+                        if val_diff > 0:
+                            sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_GREEN
+                        elif val_diff < 0:
+                            sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED"""
+                else:
+                    curr_spot_diff.append(val_diff)
+                    if type in ("Volume","Turnover"):
+                        if prev_spot_diff[iter] != 0:
+                            ## Calculate percentage difference only if denominator is not zero
+                            per_diff = ((curr_spot_diff[iter] - prev_spot_diff[iter])*100)/prev_spot_diff[iter]
+                            #sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = per_diff
+                        else:
+                            logger.warning("Division by Zero occurred!!")
+                            logger.debug(f'For Time {time} - Avoiding division by zero in {type} data for {col_name}')
+                            #sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).value = "NA"
+                            per_diff = np.zeros(1)
+                            #sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_YELLOW
 
-                    if per_diff > MAX_VOLUME_PERCENT_DIFF or per_diff < -MAX_VOLUME_PERCENT_DIFF:
+                    if type == "Volume":
+                        #if per_diff > MAX_VOLUME_PERCENT_DIFF:
+                        #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_GREEN
+                        #elif per_diff < -MAX_VOLUME_PERCENT_DIFF:
+                        #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_RED
+
+                        #if per_diff > MAX_VOLUME_PERCENT_DIFF or per_diff < -MAX_VOLUME_PERCENT_DIFF:
+                        #if col_name not in kite.equity_market_categories:
                         stock_list.append(col_name)
                         vol_list.append(per_diff)
-                    ## Logic for updating cumulative volume difference
-                    if price_vol_dict_flag:
-                        cum_vol_diff_dict[col_name] = cum_vol_diff_dict[col_name] + val_diff
-                elif type == "Turnover":
-                    #if per_diff > MAX_TURNOVER_PERCENT_DIFF:
-                    #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_GREEN
-                    #elif per_diff < -MAX_TURNOVER_PERCENT_DIFF:
-                    #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_RED
-                    temp_val_diff = val_diff/ONE_CRORE
-                    if col_name in stock_list:
-                        turn_list.append(temp_val_diff)
-                    elif col_name not in kite.equity_market_categories:
-                        if val_diff > MAX_TURNOVER_VALUE_DIFF or per_diff > MAX_TURNOVER_PERCENT_DIFF or per_diff < -MAX_TURNOVER_PERCENT_DIFF:
-                            stock_list.append(col_name)
+                        #else:
+                            #logger.debug("Ignorning Stock Name - " + col_name)
+                        ## Logic for updating cumulative volume difference
+                        if price_vol_dict_flag:
+                            cum_vol_diff_dict[col_name] = cum_vol_diff_dict[col_name] + val_diff
+                    elif type == "Turnover":
+                        #if per_diff > MAX_TURNOVER_PERCENT_DIFF:
+                        #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_GREEN
+                        #elif per_diff < -MAX_TURNOVER_PERCENT_DIFF:
+                        #    sh.range(f'{get_col_name(col_number+2)}'+ str(row_number+1)).color = COLOR_RED
+                        temp_val_diff = val_diff/ONE_CRORE
+                        if col_name in stock_list:
                             turn_list.append(temp_val_diff)
-                elif type == "Price":
-                    #if val_diff > 0:
-                    #    sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_GREEN
-                    #elif val_diff < 0:
-                    #    sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED
-                    ## Logic for updating cumulative price difference
-                    if price_vol_dict_flag:
-                        cum_price_diff_dict[col_name] = cum_price_diff_dict[col_name] + val_diff             
-        iter += 1
-        col_number += 3
+                        else:
+                            logger.warning("Not Expected!! Stock Name - " + col_name)
+                        #elif col_name not in kite.equity_market_categories:
+                        #if val_diff > MAX_TURNOVER_VALUE_DIFF or per_diff > MAX_TURNOVER_PERCENT_DIFF or per_diff < -MAX_TURNOVER_PERCENT_DIFF:
+                            #stock_list.append(col_name)
+                            #turn_list.append(temp_val_diff)
+                    elif type == "Price":
+                        #if val_diff > 0:
+                        #    sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_GREEN
+                        #elif val_diff < 0:
+                        #    sh.range(f'{get_col_name(col_number+1)}'+ str(row_number+1)).color = COLOR_RED
+                        ## Logic for updating cumulative price difference
+                        if price_vol_dict_flag:
+                            cum_price_diff_dict[col_name] = cum_price_diff_dict[col_name] + val_diff             
+            iter += 1
+            col_number += 3
+        else:
+            logger.debug(f'Ignoring {col_name} in {type} data as it is an Index Symbol')
     #if row_number == 1:
     #    sh.range("A1:ZZ1").font.bold = True
     #    sh.range("A1:ZZ1").autofit()
-    if type in ("Volume","Turnover"):
-        create_max_sheet(type,time,duration,row_number,col_number_1,vol_list,turn_list,stock_list)
+    #if type in ("Volume","Turnover"):
+    if type in ("Turnover"):
+        create_cum_turn_sheet(type,time,duration,row_number,col_number_1,turn_list,stock_list)
+        #create_cum_turn_sheet(type,time,duration,row_number,col_number_1,vol_list,turn_list,stock_list)
 ############################# End - Function to create Spot sheets #############################
 
-############################# Start - Function to print max volume and max turnover ############ 
-def create_max_sheet(type,time,duration,row_number,col_number_1,vol_list,turn_list,stock_list):
-    logger.debug(f'Printing MaxVolumeTurnover Sheet - {type} for {time} and row {row_number}')   
+############################# Start - Function to print Cumulative turnover ############
+def create_cum_turn_sheet(type,time,duration,row_number,col_number_1,turn_list,stock_list):
+    logger.debug(f'Printing CumulativeTurnover Sheet for {time} and row {row_number}')
     global cum_turn_dict
     if row_number >= 2:
-        mv.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
-        mv.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True 
+        #ct.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
+        #ct.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True
 
-        if type == "Volume":
-            if stock_list:        
+        """if type == "Volume":
+            if stock_list:
                 logger.debug(f'For MaxVolume, Stock List is - {stock_list}')
                 logger.debug(f'For MaxVolume, Volume List is - {vol_list}')
-                temp_vol_df = pd.DataFrame(vol_list, index=stock_list, columns=['Vol%Diff'])        
-                mv.range(f'{get_col_name(col_number_1)}' + '2').value = temp_vol_df
+                temp_vol_df = pd.DataFrame(vol_list, index=stock_list, columns=['Vol%Diff'])
+                ct.range(f'{get_col_name(col_number_1)}' + '2').value = temp_vol_df
             else:
-                mv.range(f'{get_col_name(col_number_1+1)}' + '2').value = "Vol%Diff"
-            mv.range(f'{get_col_name(col_number_1)}' + '2').value = "Name"
-            mv.range(f'{get_col_name(col_number_1)}' + '2').font.bold = True
-            mv.range(f'{get_col_name(col_number_1+1)}' + '2').font.bold = True            
-            logger.debug("MaxVolume Printed")
-        elif type == "Turnover":
-            if turn_list:
-                stock_list.sort()        
-                logger.debug(f'For MaxTurnover, Stock List is - {stock_list}')
-                logger.debug(f'For MaxTurnover, Turnover List is - {turn_list}')
-                temp_turn_df = pd.DataFrame(turn_list, index=stock_list, columns=['Turnover(₹ Cr)'])
-                mv.range(f'{get_col_name(col_number_1+2)}' + '2').value = temp_turn_df
+                ct.range(f'{get_col_name(col_number_1+1)}' + '2').value = "Vol%Diff"
+            ct.range(f'{get_col_name(col_number_1)}' + '2').value = "Name"
+            ct.range(f'{get_col_name(col_number_1)}' + '2').font.bold = True
+            ct.range(f'{get_col_name(col_number_1+1)}' + '2').font.bold = True            
+            logger.debug("MaxVolume Printed")"""
+        #elif type == "Turnover":
+        if stock_list and turn_list:
+            #stock_list.sort()
+            logger.debug(f'For MaxTurnover, Stock List is - {stock_list}')
+            logger.debug(f'For MaxTurnover, Turnover List is - {turn_list}')
+            #temp_turn_df = pd.DataFrame(turn_list, index=stock_list, columns=['Turnover(₹ Cr)'])
+            #ct.range(f'{get_col_name(col_number_1+2)}' + '2').value = temp_turn_df
+            #if (temp_turn_df['Turnover(₹ Cr)'] > FIFTY_CRORE/ONE_CRORE).any():
+                #logger.debug("Max Turnover greater than 50 Cr found")
+                #ct.range(f'{get_col_name(col_number_1+2)}' + '2').color = COLOR_GREEN
+                #ct.range(f'{get_col_name(col_number_1+3)}' + '2').color = COLOR_GREEN
 
-                if not cum_turn_dict:
-                    cum_turn_dict = {stock_list[i]: turn_list[i] for i in range(len(stock_list))}
-                else:
-                    temp_cum_turn_dict = {stock_list[i]: turn_list[i] for i in range(len(stock_list))}
-                    for key in temp_cum_turn_dict:
-                        if key in cum_turn_dict:
-                            cum_turn_dict[key] = cum_turn_dict[key] + temp_cum_turn_dict[key]
-                        else:
-                            cum_turn_dict.update({key:temp_cum_turn_dict[key]})
-                logger.debug(f'Cumulative turnover - {cum_turn_dict}')
+            if not cum_turn_dict:
+                cum_turn_dict = {stock_list[i]: turn_list[i] for i in range(len(stock_list))}
             else:
-                mv.range(f'{get_col_name(col_number_1+3)}' + '2').value = "Turnover(₹ Cr)"
-            mv.range(f'{get_col_name(col_number_1+2)}' + '2').value = "Name"
-            mv.range(f'{get_col_name(col_number_1+2)}' + '2').font.bold = True
-            mv.range(f'{get_col_name(col_number_1+3)}' + '2').font.bold = True
-            mv.range(f'{get_col_name(col_number_1+3)}' + '2').autofit()
-            logger.debug("MaxTurnover Printed")
+                temp_cum_turn_dict = {stock_list[i]: turn_list[i] for i in range(len(stock_list))}
+                for key in temp_cum_turn_dict:
+                    if key in cum_turn_dict:
+                        cum_turn_dict[key] = cum_turn_dict[key] + temp_cum_turn_dict[key]
+                    else:
+                        cum_turn_dict.update({key:temp_cum_turn_dict[key]})
+            logger.debug(f'Intermediate cumulative turnover - {cum_turn_dict}')
+        #else:
+            #ct.range(f'{get_col_name(col_number_1+3)}' + '2').value = "Turnover(₹ Cr)"
+        #ct.range(f'{get_col_name(col_number_1+2)}' + '2').value = "Name"
+        #ct.range(f'{get_col_name(col_number_1+2)}' + '2').font.bold = True
+        #ct.range(f'{get_col_name(col_number_1+3)}' + '2').font.bold = True
+        #ct.range(f'{get_col_name(col_number_1+3)}' + '2').autofit()
+        #logger.debug("MaxTurnover Printed")
             
-            if duration.total_seconds()/60 >= CUMULATIVE_TURNOVER_DURATION:                
-                mv.range(f'{get_col_name(col_number_1+4)}' + '1').value = "Cumulative Turnover"
-                mv.range(f'{get_col_name(col_number_1+4)}' + '1').font.bold = True
-                mv.range(f'{get_col_name(col_number_1+4)}'+ '1').color = COLOR_YELLOW
-                mv.range(f'{get_col_name(col_number_1+5)}'+ '1').color = COLOR_YELLOW
-                logger.debug(f'Cumulative turnover Before - {cum_turn_dict}')
-                temp_cum_turn_dict_1 = {key: cum_turn_dict[key] for key in cum_turn_dict if cum_turn_dict[key] >= CUMULATIVE_TURNOVER/ONE_CRORE}
-                logger.debug(f'Cumulative turnover After - {temp_cum_turn_dict_1}')
-                sorted_cum_turn_dict = dict(sorted(temp_cum_turn_dict_1.items()))
-                temp_cum_turn_df = pd.DataFrame(sorted_cum_turn_dict.values(), index=sorted_cum_turn_dict.keys(), columns=['Turnover(₹ Cr)'])
-                mv.range(f'{get_col_name(col_number_1+4)}' + '2').value = temp_cum_turn_df
-                mv.range(f'{get_col_name(col_number_1+4)}' + '2').value = "Name"
-                mv.range(f'{get_col_name(col_number_1+4)}' + '2').font.bold = True
-                mv.range(f'{get_col_name(col_number_1+5)}' + '2').font.bold = True
-                mv.range(f'{get_col_name(col_number_1+5)}' + '2').autofit()
-                logger.debug('Cumulative turonver printed')
-############################# End - Function to print max volume and max turnover ############
+        if duration.total_seconds()/60 >= CUMULATIVE_TURNOVER_DURATION:
+            ct.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
+            ct.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True
+            ct.range(f'{get_col_name(col_number_1)}' + '1').autofit()
+            #ct.range(f'{get_col_name(col_number_1+4)}' + '1').value = "Cumulative Turnover"
+            #ct.range(f'{get_col_name(col_number_1+4)}' + '1').font.bold = True
+            #ct.range(f'{get_col_name(col_number_1+4)}'+ '1').color = COLOR_YELLOW
+            #ct.range(f'{get_col_name(col_number_1+5)}'+ '1').color = COLOR_YELLOW
+            logger.debug(f'Cumulative turnover Before - {cum_turn_dict}')
+            temp_cum_turn_dict_1 = {key: cum_turn_dict[key] for key in cum_turn_dict if cum_turn_dict[key] >= CUMULATIVE_TURNOVER/ONE_CRORE}
+            logger.debug(f'Cumulative turnover After - {temp_cum_turn_dict_1}')
+            sorted_cum_turn_dict = dict(sorted(temp_cum_turn_dict_1.items()))
+            temp_cum_turn_df = pd.DataFrame(sorted_cum_turn_dict.values(), index=sorted_cum_turn_dict.keys(), columns=['Turnover(₹ Cr)'])
+            ct.range(f'{get_col_name(col_number_1)}' + '2').value = temp_cum_turn_df
+            ct.range(f'{get_col_name(col_number_1)}' + '2').value = "Name"
+            ct.range(f'{get_col_name(col_number_1)}' + '2').font.bold = True
+            ct.range(f'{get_col_name(col_number_1 + 1)}' + '2').font.bold = True
+            #ct.range(f'{get_col_name(col_number_1)}' + '2').autofit()
+            ct.range(f'{get_col_name(col_number_1 + 1)}' + '2').autofit()
+            logger.debug('Cumulative turonver printed')
+############################# End - Function to print Cumulative turnover ############
 
 def validate_buy_sell(df1, df2, list1, list2):
     for idx in df2.index:
@@ -634,7 +655,7 @@ def validate_buy_sell(df1, df2, list1, list2):
         else:
             logger.debug('validate_buy_sell : Not Expected to reach here')
         
-############################# Start - Function to compare Cumulative Price, Volume difference after every set duration ############
+############################# Start - Function to compare Cumulative Price, Volume difference after every fixed duration ############
 ############################# Also print the direction (Up,Down) for each stock #########################################
 def create_price_vol_sheets(df, time, row_number_1):
     logger.debug(f'Printing PriceVolumeDirection Sheets for {time} and row {row_number_1}')
@@ -816,10 +837,9 @@ def create_price_vol_sheets(df, time, row_number_1):
         else:
             logger.debug("Function create_price_vol_sheets, Equity Config df is None")
 
-############################# End - Function to compare Cumulative Price, Volume difference after every set duration ############ 
+############################# End - Function to compare Cumulative Price, Volume difference after every fixed duration ############ 
 
-############################# Start - Function to print top 5 gainers and loosers ############ 
-
+############################# Start - Function to print top 5 gainers and loosers ############
 def print_top_gainers_loosers(df):
     gainers_df = df.sort_values(by="percent_change", ascending = False)
     loosers_df = df.sort_values(by="percent_change")
@@ -899,7 +919,7 @@ def print_equity_info(df, json_data, eq_symbol):
 ############################# End - Function to print equity info ############ 
 """
 while True:
-    time.sleep(1)
+    time.sleep(10)
     ############################# OptionChain Starts #############################
     """
     try:
@@ -1054,7 +1074,7 @@ while True:
         sv.clear()
         sp.clear()
         st.clear()
-        mv.clear()
+        ct.clear()
         puvu.clear()
         row_number = 1
         col_number = 2
@@ -1149,7 +1169,7 @@ while True:
                     logger.error(f'Error Creating Spot data - {e}')
                     continue
                 if row_number >= 2:
-                    col_number_1 += 4
+                    #col_number_1 += 4
                     price_vol_dict_flag = True
                 
                 if duration.total_seconds()/60 >= CUMULATIVE_TURNOVER_DURATION:
@@ -1235,7 +1255,3 @@ while True:
     ####################### FuturesData Ends ###########################
 
     """
-
-
-
-

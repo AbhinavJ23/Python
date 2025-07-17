@@ -68,8 +68,3 @@ class KiteLogin:
 
     def get_access_token(self):
         return self.access_token
-
-# Example usage:
-# kite_login = KiteLogin()
-# api_key = kite_login.get_api_key()
-# access_token = kite_login.get_access_token()
