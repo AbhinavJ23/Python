@@ -2,22 +2,20 @@ import os,sys,time
 from sys import platform
 import pandas as pd
 import xlwings as xw
-#import dateutil.parser
 import numpy as np
-#import time
 from datetime import datetime, timedelta
 from baselogger import logger
 import ctypes
-#from py_vollib.black_scholes.greeks.analytical import delta,gamma,rho,theta,vega
-#from baselogin import Login
+from baselogin import Login
 from kitemain import KiteMain
 
+# Start - Call splash to show program loading
 if getattr(sys, 'frozen', False):
     import pyi_splash
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '08/07/2025 00:00:00'
+    valid_from_str = '19/07/2025 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     valid_till_time = valid_from_time + timedelta(days=30)
     time_now = datetime.now()
@@ -51,13 +49,26 @@ def check_validity():
 
         return True
 ############################# End - Function to check validity,expiry #############################
+
+# End - Call splash to show program loading
 if getattr(sys, 'frozen', False):
     pyi_splash.close()
 
+# Show login screen
+login = Login()
+
+if login.is_logged_in:
+    logger.debug("Logged in. Proceeding further....")
+else:
+    logger.error("Not Logged in. Exiting....")
+    sys.exit()
+
+# Check validity and expiry
 status = check_validity()
 if not status:
    sys.exit()
 
+# All good. Proceeding with Kite Data
 kite = KiteMain()
 
 ## Creating new excel and adding sheets
@@ -143,7 +154,7 @@ eq.range('H1').column_width = 2
 eq.range('H1:H510').color = COLOR_GREY
 
 ######################### Initializing Configuration sheet #######################
-cfg.range('D1').value = "IMPORTANT! BEFORE GIVING VALUES IN OTHER SHEETS, USE THIS SHEET TO CHECK CONFIGURATIONS. ADD/MODIFY IF REQUIRED."
+cfg.range('D1').value = "IMPORTANT! KINDLY USE THIS SHEET TO CHECK CONFIGURATIONS AND OTHER DETAILS. ADD/MODIFY AS REQUIRED."
 cfg.range('D1').font.bold = True
 cfg.range('A1:CZ1').color = COLOR_GREY
 cfg.range('A2').value = "EQUITY"
@@ -485,7 +496,8 @@ def create_spot_data(df,type,time,duration,row_number,prev_spot,curr_spot,prev_s
                     logger.debug(f'For Time {time} - In {type} data for {col_name},  current value is {curr_spot[iter]} and previous value is {prev_spot[iter]}, hence setting its difference to zero')
                     val_diff = np.zeros(1)
                 if type in ("Volume","Turnover") and val_diff < 0:
-                    ## This indicates some data issue
+                    ## This could be due to some data issue
+                    ## It could also be possible that value (price/volume/turover) has not changed since last time.
                     logger.warning(f'Potential Data Issue in {type} data!! value diff is {val_diff}')
                     logger.debug(f'For Time {time} - In {type} data for {col_name}, current value {curr_spot[iter]} can not be less than previous value {prev_spot[iter]}. Hence setting difference between current and previous value as zero')
                     val_diff = np.zeros(1)
@@ -638,7 +650,33 @@ def create_cum_turn_sheet(type,time,duration,row_number,col_number_1,turn_list,s
             #ct.range(f'{get_col_name(col_number_1)}' + '2').autofit()
             ct.range(f'{get_col_name(col_number_1 + 1)}' + '2').autofit()
             logger.debug('Cumulative turonver printed')
+            check_price_up_down(col_number_1, sorted_cum_turn_dict, prev_cum_price_diff_dict, cum_price_diff_dict)
 ############################# End - Function to print Cumulative turnover ############
+
+############################# Start - Function to check if cumulative turnover stock price ############
+############################# is up or down compared to previous price #############################
+def check_price_up_down(col_number_1, turn_dict, prev_price_dict, curr_price_dict):
+    logger.debug('Checking Price Up Down')
+    logger.debug(f'Previous Cumulative Price Difference Dict - {prev_price_dict}')
+    logger.debug(f'Current Cumulative Price Difference Dict - {curr_price_dict}')
+    if prev_price_dict and curr_price_dict:
+        counter = 2
+        for key in turn_dict:
+            if key in prev_price_dict and key in curr_price_dict:
+                if curr_price_dict[key] > prev_price_dict[key]:
+                    logger.debug(f'Current Equity price of {key} is greater than last price')
+                    ct.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_GREEN
+                elif curr_price_dict[key] < prev_price_dict[key]:
+                    logger.debug(f'Current Equity price of {key} is less than last price')
+                    ct.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_RED
+                elif curr_price_dict[key] == prev_price_dict[key]:
+                    logger.debug(f'Current Equity price of {key} is equal to last price')
+                    ct.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_YELLOW
+            else:
+                logger.warning(f'Not Expected!! Key {key} not found in previous or current cumulative price difference dicts')
+            counter += 1
+############################# End - Function to check if cumulative turnover stock price ############
+############################# is up or down compared to previous price #############################
 
 def validate_buy_sell(df1, df2, list1, list2):
     for idx in df2.index:

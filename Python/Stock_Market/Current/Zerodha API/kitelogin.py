@@ -42,10 +42,8 @@ class KiteLogin:
         else:
             kite = KiteConnect(api_key=self.login_credentials["api_key"])
             msg = f"Login to Zerodha account to get the access token. Open the following URL in your browser: {kite.login_url()}"
-            logger.debug(msg)
+            logger.debug(msg)            
             print(msg)
-            #print("Open the following URL in your browser:")
-            #print(kite.login_url())
             request_token = input("Enter the request token from the URL: ")
             try:
                 self.access_token = kite.generate_session(
