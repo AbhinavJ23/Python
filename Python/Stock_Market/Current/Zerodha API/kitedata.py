@@ -15,7 +15,7 @@ if getattr(sys, 'frozen', False):
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '19/07/2025 00:00:00'
+    valid_from_str = '18/08/2025 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     valid_till_time = valid_from_time + timedelta(days=30)
     time_now = datetime.now()
@@ -80,7 +80,8 @@ if not os.path.exists(file_name):
         wb.sheets.add('PriceUpVolumeDown')
         wb.sheets.add("PriceDownVolumeDown")
         wb.sheets.add("PriceUpVolumeUp")
-        wb.sheets.add("CumulativeTurnover")
+        wb.sheets.add("MinCumulativeTurnover")
+        wb.sheets.add("MaxCumulativeTurnover")
         #wb.sheets.add("SpotTurnover")
         #wb.sheets.add("SpotVolume")
         #wb.sheets.add("SpotPrice")
@@ -102,7 +103,8 @@ eq = wb.sheets("EquityData")
 #sp = wb.sheets("SpotPrice")
 #sv = wb.sheets("SpotVolume")
 #st = wb.sheets("SpotTurnover")
-ct = wb.sheets("CumulativeTurnover")
+maxct = wb.sheets("MaxCumulativeTurnover")
+minct = wb.sheets("MinCumulativeTurnover")
 puvu = wb.sheets("PriceUpVolumeUp")
 pdvd = wb.sheets("PriceDownVolumeDown")
 puvd = wb.sheets("PriceUpVolumeDown")
@@ -122,7 +124,8 @@ TEN_CRORE = 100000000
 FIFTY_CRORE = 5000000000
 HUNDRED_CRORE = 10000000000
 CUMULATIVE_TURNOVER_DURATION = 5 #Mins
-CUMULATIVE_TURNOVER = 100000000
+MAX_CUMULATIVE_TURNOVER = 100000000
+MIN_CUMULATIVE_TURNOVER = 20000000
 MARKET_OPEN_DURATION = 375 #Mins
 DELIVERY_CHANGE_DURATION = 30 #Mins
 RISK_FREE_INT_RATE = 5 #Percent
@@ -160,22 +163,26 @@ cfg.range('A1:CZ1').color = COLOR_GREY
 cfg.range('A2').value = "EQUITY"
 cfg.range('A2').font.bold = True
 cfg.range('A2').color = COLOR_YELLOW
-cfg.range('A3').value = "Cumulative Turnover"
+cfg.range('A3').value = "Max Cumulative Turnover"
 cfg.range('A3').font.bold = True
-cfg.range('B3').value = CUMULATIVE_TURNOVER/ONE_CRORE
+cfg.range('B3').value = MAX_CUMULATIVE_TURNOVER/ONE_CRORE
 cfg.range('C3').value = "₹ Cr"
-cfg.range('A4').value = "Cumulative Turnover Duration"
+cfg.range('A4').value = "Min Cumulative Turnover"
 cfg.range('A4').font.bold = True
-cfg.range("A4").autofit()
-cfg.range('B4').value = CUMULATIVE_TURNOVER_DURATION
-cfg.range('C4').value = "Mins"
-cfg.range('A5:CZ5').color = COLOR_GREY
-cfg.range('A6').value = "Stock List"
-cfg.range('A6').font.bold = True
-cfg.range('A7').value = "Support"
+cfg.range('B4').value = MIN_CUMULATIVE_TURNOVER/ONE_CRORE
+cfg.range('C4').value = "₹ Cr"
+cfg.range('A5').value = "Cumulative Turnover Duration"
+cfg.range('A5').font.bold = True
+cfg.range("A5").autofit()
+cfg.range('B5').value = CUMULATIVE_TURNOVER_DURATION
+cfg.range('C5').value = "Mins"
+cfg.range('A6:CZ6').color = COLOR_GREY
+cfg.range('A7').value = "Stock List"
 cfg.range('A7').font.bold = True
-cfg.range('A8').value = "Resistance"
+cfg.range('A8').value = "Support"
 cfg.range('A8').font.bold = True
+cfg.range('A9').value = "Resistance"
+cfg.range('A9').font.bold = True
 cfg.range('A11:CZ11').color = COLOR_GREY
 """
 cfg.range('A12').value = "OPTIONS"
@@ -424,9 +431,9 @@ def get_delivery_info(df):
 def get_equity_config_df():
     stocks_res_sup_df = None
     logger.debug("Getting Equity Config DataFrame")
-    config_stock_list = cfg.range('B6:CZ6').value
-    config_support_list = cfg.range('B7:CZ7').value
-    config_resistance_list = cfg.range('B8:CZ8').value
+    config_stock_list = cfg.range('B7:CZ7').value
+    config_support_list = cfg.range('B8:CZ8').value
+    config_resistance_list = cfg.range('B9:CZ9').value
     if config_stock_list:
         while None in config_stock_list:
             config_stock_list.remove(None)
@@ -585,20 +592,20 @@ def create_cum_turn_sheet(type,time,duration,row_number,col_number_1,turn_list,s
     logger.debug(f'Printing CumulativeTurnover Sheet for {time} and row {row_number}')
     global cum_turn_dict
     if row_number >= 2:
-        #ct.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
-        #ct.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True
+        #maxct.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
+        #maxct.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True
 
         """if type == "Volume":
             if stock_list:
                 logger.debug(f'For MaxVolume, Stock List is - {stock_list}')
                 logger.debug(f'For MaxVolume, Volume List is - {vol_list}')
                 temp_vol_df = pd.DataFrame(vol_list, index=stock_list, columns=['Vol%Diff'])
-                ct.range(f'{get_col_name(col_number_1)}' + '2').value = temp_vol_df
+                maxct.range(f'{get_col_name(col_number_1)}' + '2').value = temp_vol_df
             else:
-                ct.range(f'{get_col_name(col_number_1+1)}' + '2').value = "Vol%Diff"
-            ct.range(f'{get_col_name(col_number_1)}' + '2').value = "Name"
-            ct.range(f'{get_col_name(col_number_1)}' + '2').font.bold = True
-            ct.range(f'{get_col_name(col_number_1+1)}' + '2').font.bold = True            
+                maxct.range(f'{get_col_name(col_number_1+1)}' + '2').value = "Vol%Diff"
+            maxct.range(f'{get_col_name(col_number_1)}' + '2').value = "Name"
+            maxct.range(f'{get_col_name(col_number_1)}' + '2').font.bold = True
+            maxct.range(f'{get_col_name(col_number_1+1)}' + '2').font.bold = True            
             logger.debug("MaxVolume Printed")"""
         #elif type == "Turnover":
         if stock_list and turn_list:
@@ -606,11 +613,11 @@ def create_cum_turn_sheet(type,time,duration,row_number,col_number_1,turn_list,s
             logger.debug(f'For MaxTurnover, Stock List is - {stock_list}')
             logger.debug(f'For MaxTurnover, Turnover List is - {turn_list}')
             #temp_turn_df = pd.DataFrame(turn_list, index=stock_list, columns=['Turnover(₹ Cr)'])
-            #ct.range(f'{get_col_name(col_number_1+2)}' + '2').value = temp_turn_df
+            #maxct.range(f'{get_col_name(col_number_1+2)}' + '2').value = temp_turn_df
             #if (temp_turn_df['Turnover(₹ Cr)'] > FIFTY_CRORE/ONE_CRORE).any():
                 #logger.debug("Max Turnover greater than 50 Cr found")
-                #ct.range(f'{get_col_name(col_number_1+2)}' + '2').color = COLOR_GREEN
-                #ct.range(f'{get_col_name(col_number_1+3)}' + '2').color = COLOR_GREEN
+                #maxct.range(f'{get_col_name(col_number_1+2)}' + '2').color = COLOR_GREEN
+                #maxct.range(f'{get_col_name(col_number_1+3)}' + '2').color = COLOR_GREEN
 
             if not cum_turn_dict:
                 cum_turn_dict = {stock_list[i]: turn_list[i] for i in range(len(stock_list))}
@@ -623,55 +630,95 @@ def create_cum_turn_sheet(type,time,duration,row_number,col_number_1,turn_list,s
                         cum_turn_dict.update({key:temp_cum_turn_dict[key]})
             logger.debug(f'Intermediate cumulative turnover - {cum_turn_dict}')
         #else:
-            #ct.range(f'{get_col_name(col_number_1+3)}' + '2').value = "Turnover(₹ Cr)"
-        #ct.range(f'{get_col_name(col_number_1+2)}' + '2').value = "Name"
-        #ct.range(f'{get_col_name(col_number_1+2)}' + '2').font.bold = True
-        #ct.range(f'{get_col_name(col_number_1+3)}' + '2').font.bold = True
-        #ct.range(f'{get_col_name(col_number_1+3)}' + '2').autofit()
+            #maxct.range(f'{get_col_name(col_number_1+3)}' + '2').value = "Turnover(₹ Cr)"
+        #maxct.range(f'{get_col_name(col_number_1+2)}' + '2').value = "Name"
+        #maxct.range(f'{get_col_name(col_number_1+2)}' + '2').font.bold = True
+        #maxct.range(f'{get_col_name(col_number_1+3)}' + '2').font.bold = True
+        #maxct.range(f'{get_col_name(col_number_1+3)}' + '2').autofit()
         #logger.debug("MaxTurnover Printed")
             
         if duration.total_seconds()/60 >= CUMULATIVE_TURNOVER_DURATION:
-            ct.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
-            ct.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True
-            ct.range(f'{get_col_name(col_number_1)}' + '1').autofit()
-            #ct.range(f'{get_col_name(col_number_1+4)}' + '1').value = "Cumulative Turnover"
-            #ct.range(f'{get_col_name(col_number_1+4)}' + '1').font.bold = True
-            #ct.range(f'{get_col_name(col_number_1+4)}'+ '1').color = COLOR_YELLOW
-            #ct.range(f'{get_col_name(col_number_1+5)}'+ '1').color = COLOR_YELLOW
-            logger.debug(f'Cumulative turnover Before - {cum_turn_dict}')
-            temp_cum_turn_dict_1 = {key: cum_turn_dict[key] for key in cum_turn_dict if cum_turn_dict[key] >= CUMULATIVE_TURNOVER/ONE_CRORE}
-            logger.debug(f'Cumulative turnover After - {temp_cum_turn_dict_1}')
-            sorted_cum_turn_dict = dict(sorted(temp_cum_turn_dict_1.items()))
-            temp_cum_turn_df = pd.DataFrame(sorted_cum_turn_dict.values(), index=sorted_cum_turn_dict.keys(), columns=['Turnover(₹ Cr)'])
-            ct.range(f'{get_col_name(col_number_1)}' + '2').value = temp_cum_turn_df
-            ct.range(f'{get_col_name(col_number_1)}' + '2').value = "Name"
-            ct.range(f'{get_col_name(col_number_1)}' + '2').font.bold = True
-            ct.range(f'{get_col_name(col_number_1 + 1)}' + '2').font.bold = True
-            #ct.range(f'{get_col_name(col_number_1)}' + '2').autofit()
-            ct.range(f'{get_col_name(col_number_1 + 1)}' + '2').autofit()
-            logger.debug('Cumulative turonver printed')
-            check_price_up_down(col_number_1, sorted_cum_turn_dict, prev_cum_price_diff_dict, cum_price_diff_dict)
+            create_cum_turn_sheet_min_max("Max",time, col_number_1, cum_turn_dict)
+            create_cum_turn_sheet_min_max("Min",time, col_number_1, cum_turn_dict)
+            #maxct.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
+            #maxct.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True
+            #maxct.range(f'{get_col_name(col_number_1)}' + '1').autofit()
+            #maxct.range(f'{get_col_name(col_number_1+4)}' + '1').value = "Cumulative Turnover"
+            #maxct.range(f'{get_col_name(col_number_1+4)}' + '1').font.bold = True
+            #maxct.range(f'{get_col_name(col_number_1+4)}'+ '1').color = COLOR_YELLOW
+            #maxct.range(f'{get_col_name(col_number_1+5)}'+ '1').color = COLOR_YELLOW
+            #logger.debug(f'Cumulative turnover Before - {cum_turn_dict}')
+            #cum_turn_dict_max = {key: cum_turn_dict[key] for key in cum_turn_dict if cum_turn_dict[key] >= MAX_CUMULATIVE_TURNOVER/ONE_CRORE}
+            #logger.debug(f'Max Cumulative turnover After - {cum_turn_dict_max}')
+            #sorted_cum_turn_dict_max = dict(sorted(cum_turn_dict_max.items()))
+            #cum_turn_df_max = pd.DataFrame(sorted_cum_turn_dict_max.values(), index=sorted_cum_turn_dict_max.keys(), columns=['Turnover(₹ Cr)'])
+            #maxct.range(f'{get_col_name(col_number_1)}' + '2').value = cum_turn_df_max
+            #maxct.range(f'{get_col_name(col_number_1)}' + '2').value = "Name"
+            #maxct.range(f'{get_col_name(col_number_1)}' + '2').font.bold = True
+            #maxct.range(f'{get_col_name(col_number_1 + 1)}' + '2').font.bold = True
+            #maxct.range(f'{get_col_name(col_number_1)}' + '2').autofit()
+            #maxct.range(f'{get_col_name(col_number_1 + 1)}' + '2').autofit()
+            #logger.debug('Cumulative turonver printed')
+            #check_price_up_down(col_number_1, sorted_cum_turn_dict, prev_cum_price_diff_dict, cum_price_diff_dict)
 ############################# End - Function to print Cumulative turnover ############
+
+############################# Start - Function to print Min and Max Cumulative turnover ############
+def create_cum_turn_sheet_min_max(type, time, col_number_1, cum_turn_dict):
+    logger.debug(f'Printing {type}CumulativeTurnover Sheet for {time}')
+    logger.debug(f'{type}Cumulative turnover Before - {cum_turn_dict}')
+    sh = None
+    if type == "Max":
+        sh = maxct
+        temp_cum_turn_dict = {key: cum_turn_dict[key] for key in cum_turn_dict if cum_turn_dict[key] >= MAX_CUMULATIVE_TURNOVER/ONE_CRORE}
+    elif type == "Min":
+        sh = minct
+        temp_cum_turn_dict = {key: cum_turn_dict[key] for key in cum_turn_dict if cum_turn_dict[key] <= MIN_CUMULATIVE_TURNOVER/ONE_CRORE}
+    else:
+        logger.error(f'Error! Unexpected Input - {type}')
+        return
+    logger.debug(f'{type}Cumulative turnover After - {temp_cum_turn_dict}')
+    sh.range(f'{get_col_name(col_number_1)}' + '1').value = time.strftime("%H:%M:%S")
+    sh.range(f'{get_col_name(col_number_1)}' + '1').font.bold = True
+    sh.range(f'{get_col_name(col_number_1)}' + '1').autofit()
+    sorted_cum_turn_dict = dict(sorted(temp_cum_turn_dict.items()))
+    temp_cum_turn_df = pd.DataFrame(sorted_cum_turn_dict.values(), index=sorted_cum_turn_dict.keys(), columns=['Turnover(₹ Cr)'])
+    sh.range(f'{get_col_name(col_number_1)}' + '2').value = temp_cum_turn_df
+    sh.range(f'{get_col_name(col_number_1)}' + '2').value = "Name"
+    sh.range(f'{get_col_name(col_number_1)}' + '2').font.bold = True
+    sh.range(f'{get_col_name(col_number_1 + 1)}' + '2').font.bold = True
+    #sh.range(f'{get_col_name(col_number_1)}' + '2').autofit()
+    sh.range(f'{get_col_name(col_number_1 + 1)}' + '2').autofit()
+    logger.debug(f'{type}Cumulative turonver printed')
+    check_price_up_down(type, col_number_1, sorted_cum_turn_dict, prev_cum_price_diff_dict, cum_price_diff_dict)
+############################# End - Function to print Min and Max Cumulative turnove ############
 
 ############################# Start - Function to check if cumulative turnover stock price ############
 ############################# is up or down compared to previous price #############################
-def check_price_up_down(col_number_1, turn_dict, prev_price_dict, curr_price_dict):
-    logger.debug('Checking Price Up Down')
+def check_price_up_down(type, col_number_1, turn_dict, prev_price_dict, curr_price_dict):
+    logger.debug(f'Checking Price Up Down for {type}Cumulative Turnover')
     logger.debug(f'Previous Cumulative Price Difference Dict - {prev_price_dict}')
     logger.debug(f'Current Cumulative Price Difference Dict - {curr_price_dict}')
+    sh = None
+    if type == "Max":
+        sh = maxct
+    elif type == "Min":
+        sh = minct
+    else:
+        logger.error(f'Error! Unexpected Input - {type}')
+        return
     if prev_price_dict and curr_price_dict:
         counter = 2
         for key in turn_dict:
             if key in prev_price_dict and key in curr_price_dict:
                 if curr_price_dict[key] > prev_price_dict[key]:
                     logger.debug(f'Current Equity price of {key} is greater than last price')
-                    ct.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_GREEN
+                    sh.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_GREEN
                 elif curr_price_dict[key] < prev_price_dict[key]:
                     logger.debug(f'Current Equity price of {key} is less than last price')
-                    ct.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_RED
+                    sh.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_RED
                 elif curr_price_dict[key] == prev_price_dict[key]:
                     logger.debug(f'Current Equity price of {key} is equal to last price')
-                    ct.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_YELLOW
+                    sh.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_YELLOW
             else:
                 logger.warning(f'Not Expected!! Key {key} not found in previous or current cumulative price difference dicts')
             counter += 1
@@ -1096,9 +1143,11 @@ while True:
     ####################### EquityData Starts ###########################
     try:
         ind_sym, eq_sym = eq.range("E2").value, eq.range("E3").value
-        CUMULATIVE_TURNOVER = cfg.range('B3').value
-        CUMULATIVE_TURNOVER = CUMULATIVE_TURNOVER*ONE_CRORE
-        CUMULATIVE_TURNOVER_DURATION = cfg.range('B4').value
+        MAX_CUMULATIVE_TURNOVER = cfg.range('B3').value
+        MAX_CUMULATIVE_TURNOVER = MAX_CUMULATIVE_TURNOVER*ONE_CRORE
+        MIN_CUMULATIVE_TURNOVER = cfg.range('B4').value
+        MIN_CUMULATIVE_TURNOVER = MIN_CUMULATIVE_TURNOVER*ONE_CRORE
+        CUMULATIVE_TURNOVER_DURATION = cfg.range('B5').value
     except Exception as e:
         logger.debug(f'Closing Excel and handling exception - {e}')
         sys.exit()
@@ -1112,7 +1161,8 @@ while True:
         sv.clear()
         sp.clear()
         st.clear()
-        ct.clear()
+        maxct.clear()
+        minct.clear()
         puvu.clear()
         row_number = 1
         col_number = 2
