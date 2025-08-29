@@ -15,7 +15,7 @@ if getattr(sys, 'frozen', False):
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '18/08/2025 00:00:00'
+    valid_from_str = '28/08/2025 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     valid_till_time = valid_from_time + timedelta(days=30)
     time_now = datetime.now()
@@ -57,6 +57,7 @@ if getattr(sys, 'frozen', False):
 # Show login screen
 login = Login()
 
+# Check if login is successful
 if login.is_logged_in:
     logger.debug("Logged in. Proceeding further....")
 else:
@@ -113,6 +114,7 @@ pdvu = wb.sheets("PriceDownVolumeUp")
 ####################### Initializing Constants #######################
 COLOR_GREY = (211, 211, 211)
 COLOR_GREEN = (0, 255, 0)
+COLOR_DARK_GREEN = (0, 100, 0)
 COLOR_RED = (255, 0, 0)
 COLOR_YELLOW = (255, 255, 0)
 COLOR_CYAN = (0, 255, 255)
@@ -299,7 +301,6 @@ pre_fd_sym = None
 logger.debug("FuturesData sheet initialized")
 
 """
-
 logger.debug("All Excel sheets initialized")
 
 ####################### Initializing Global Variables #######################
@@ -321,6 +322,7 @@ cum_price_diff_dict = {}
 prev_cum_price_diff_dict = {}
 cum_vol_diff_dict = {}
 prev_cum_vol_diff_dict = {}
+prev_min_cum_turn_dict = {}
 price_vol_dict_flag = False
 prev_eq_df = None
 initial_len_eq_df = 0
@@ -603,7 +605,7 @@ def create_spot_data(df,type,time,duration,row_number,prev_spot,curr_spot,prev_s
         #create_cum_turn_sheet(type,time,duration,row_number,col_number_1,vol_list,turn_list,stock_list)
 ############################# End - Function to create Spot sheets #############################
 
-############################# Start - Function to print Cumulative turnover ############
+############################# Start - Function to creete Cumulative turnover data ############
 def create_cum_turn_sheet(type,time,duration,row_number,col_number_1,turn_list,stock_list, spot_df_price):
     logger.debug(f'Printing CumulativeTurnover Sheet for {time} and row {row_number}')
     global cum_turn_dict
@@ -676,19 +678,21 @@ def create_cum_turn_sheet(type,time,duration,row_number,col_number_1,turn_list,s
             #maxct.range(f'{get_col_name(col_number_1 + 1)}' + '2').autofit()
             #logger.debug('Cumulative turonver printed')
             #check_price_up_down(col_number_1, sorted_cum_turn_dict, prev_cum_price_diff_dict, cum_price_diff_dict)
-############################# End - Function to print Cumulative turnover ############
+############################# End - Function to creete Cumulative turnover data ############
 
 ############################# Start - Function to print Min and Max Cumulative turnover ############
 def create_cum_turn_sheet_min_max(type, time, col_number_1, cum_turn_dict, spot_df_price):
     logger.debug(f'Printing {type}CumulativeTurnover Sheet for {time}')
     logger.debug(f'{type}CumulativeTurnover Before - {cum_turn_dict}')
     sh = None
+    global prev_min_cum_turn_dict
     if type == "Max":
         sh = maxct
         temp_cum_turn_dict = {key: cum_turn_dict[key] for key in cum_turn_dict if cum_turn_dict[key] >= MAX_CUMULATIVE_TURNOVER/ONE_CRORE}
     elif type == "Min":
         sh = minct
         temp_cum_turn_dict = {key: cum_turn_dict[key] for key in cum_turn_dict if cum_turn_dict[key] <= MIN_CUMULATIVE_TURNOVER/ONE_CRORE}
+        prev_min_cum_turn_dict = temp_cum_turn_dict
     else:
         logger.error(f'Error! Unexpected Input - {type}')
         return
@@ -716,12 +720,12 @@ def create_cum_turn_sheet_min_max(type, time, col_number_1, cum_turn_dict, spot_
     sh.range(f'{get_col_name(col_number_1 + 2)}' + '2').options(index=False).value = temp_price_df
     sh.range(f'{get_col_name(col_number_1 + 2)}' + '2').font.bold = True
     logger.debug(f'{type}CumulativeTuronver printed')
-    check_price_up_down(type, col_number_1, sorted_cum_turn_dict, prev_cum_price_diff_dict, cum_price_diff_dict)
-############################# End - Function to print Min and Max Cumulative turnove ############
+    check_price_up_down(type, col_number_1, sorted_cum_turn_dict, prev_cum_price_diff_dict, cum_price_diff_dict, prev_min_cum_turn_dict)
+############################# End - Function to print Min and Max Cumulative turnover ############
 
 ############################# Start - Function to check if cumulative turnover stock price ############
 ############################# is up or down compared to previous price #############################
-def check_price_up_down(type, col_number_1, turn_dict, prev_price_dict, curr_price_dict):
+def check_price_up_down(type, col_number_1, turn_dict, prev_price_dict, curr_price_dict, prev_min_cum_turn_dict):
     logger.debug(f'Checking Price Up Down for {type}CumulativeTurnover')
     logger.debug(f'Previous Cumulative Price Difference Dict - {prev_price_dict}')
     logger.debug(f'Current Cumulative Price Difference Dict - {curr_price_dict}')
@@ -741,6 +745,10 @@ def check_price_up_down(type, col_number_1, turn_dict, prev_price_dict, curr_pri
                 if curr_price_dict[key] > prev_eq_df.loc[key, 'last_price'] * PERCENT_UP/100:
                     logger.debug(f'Current Equity price of {key} is {PERCENT_UP}% greater than last price')
                     sh.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_GREEN
+                    ## Checking if any stock from prev min cumulative turnover has moved to max cumulative turnover
+                    if type == "Max" and key in prev_min_cum_turn_dict:
+                        logger.debug(f'{key} has moved to MaxCumulativeTurnover from MinCumulativeTurnover with Price increase')
+                        sh.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_DARK_GREEN
                 elif curr_price_dict[key] < prev_eq_df.loc[key, 'last_price'] * PERCENT_DOWN/100:
                     logger.debug(f'Current Equity price of {key} is {PERCENT_DOWN}% less than last price')
                     sh.range(f'{get_col_name(col_number_1)}'+ str(counter + 1)).color = COLOR_RED
@@ -831,9 +839,9 @@ def create_price_vol_sheets(df, time, row_number_1):
             puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Price"
             puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).font.bold = True
             puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Volume"
-            puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).font.bold = True         
+            puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).font.bold = True
         else:
-            ## Check difference between previous cumulative(price,volume) and current cumulative(price,volume)
+            ## Check difference between previous cumulative volume and current cumulative volume along with current cumulative price
             #if (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) == 0:
             if cum_price_diff_dict[key] == 0:
                 puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Neutral"
