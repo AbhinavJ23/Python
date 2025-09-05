@@ -6,12 +6,14 @@ from users import Users
 import customtkinter as ctk
 import tkinter.messagebox as tkmb
 from datetime import datetime
+from nseindex import NseIndex
 
 class Login:
     
     def __init__(self):
         super().__init__()
         self.is_logged_in = False
+        self.index_symbol = None
         ctk.set_appearance_mode("dark")
         self.app = ctk.CTk()
         self.app.geometry("400x400")
@@ -20,21 +22,41 @@ class Login:
 
         self.frame = ctk.CTkFrame(master=self.app)
         self.frame.pack(pady=20,padx=40, fill='both',expand=True)
-    
-        self.user_id = ctk.CTkEntry(master=self.frame, placeholder_text="User Id")
-        self.user_id.pack(pady=12,padx=10)
 
-        self.user_pass = ctk.CTkEntry(master=self.frame, placeholder_text="Password", show="*")
-        self.user_pass.pack(pady=12,padx=10)
-        
+        self.user_id_label = ctk.CTkLabel(master=self.frame, text="User Id", justify="left")
+        #self.user_id_label.pack(pady=12,padx=10)
+        self.user_id_label.pack(pady=(10,0))
+        self.user_id = ctk.CTkEntry(master=self.frame, placeholder_text="Enter User Id")
+        #self.user_id.pack(pady=12,padx=10)
+        self.user_id.pack(pady=0)
+
+        self.user_pass_label = ctk.CTkLabel(master=self.frame, text="Password")
+        #self.user_pass_label.pack(pady=12,padx=10)
+        self.user_pass_label.pack(pady=(10,0))
+        self.user_pass = ctk.CTkEntry(master=self.frame, placeholder_text="Enter Password", show="*")
+        #self.user_pass.pack(pady=12,padx=10)
+        self.user_pass.pack(pady=0)
+
+        self.index = NseIndex()
+        self.options = self.index.index_symbols
+        self.index_label = ctk.CTkLabel(master=self.frame, text="Index")
+        #self.index_label.pack(pady=12,padx=10)
+        self.index_label.pack(pady=(10,0))
+        self.index_combo = ctk.CTkComboBox(master=self.frame, values=self.options)
+        #self.index_combo.pack(pady=12,padx=10)
+        self.index_combo.pack(pady=0)
+        self.index_combo.set("NIFTY 50")
+
+        #self.index_combo.pack(pady=12)
         self.button2 = ctk.CTkButton(master=self.frame, text="Register", command=self.do_register)
-        self.button2.pack(padx=12, pady=10)
+        #self.button2.pack(pady=(10,0))
+        self.button2.pack(padx=12, pady=(25,0))
 
         self.button1 = ctk.CTkButton(master=self.frame, text="Login", command=self.do_login)
         self.button1.pack(padx=12, pady=10)
 
         self.button3 = ctk.CTkButton(master=self.frame, text="Clear", command=self.do_clear)
-        self.button3.pack(padx=12, pady=10)
+        self.button3.pack(padx=12, pady=0)
 
         self.system_info = platform.uname()
         self.system = self.system_info.system
@@ -185,6 +207,11 @@ class Login:
                 tkmb.showerror(title="Error",message="Please enter valid User Id")
                 self.do_clear()
                 return False
+            elif self.index_combo.get() not in self.index.index_symbols:
+                logger.debug("do_login - Invalid Index selected")
+                tkmb.showerror(title="Error",message="Please select valid Index")
+                self.do_clear()
+                return False
             else:
                 logger.debug("do_login - User is Valid")
 
@@ -226,6 +253,8 @@ class Login:
                     self.do_clear()
                     login_flag = True
                     self.is_logged_in = True
+                    self.index_symbol = self.index_combo.get()
+                    logger.debug(f"Selected Index - {self.index_symbol}")
                     self.do_cleanup()
                     break
             if not login_flag:

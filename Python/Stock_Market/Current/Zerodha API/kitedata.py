@@ -15,10 +15,20 @@ if getattr(sys, 'frozen', False):
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '28/08/2025 00:00:00'
+    valid_from_str = '01/09/2025 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     valid_till_time = valid_from_time + timedelta(days=30)
     time_now = datetime.now()
+    if time_now < valid_from_time:
+        if platform == "win32":
+            ctypes.windll.user32.MessageBoxW(0, "Your product usage period has not started yet!", "Error",0)
+        elif platform == "darwin":
+            command_str = "osascript -e 'Tell application \"System Events\" to display dialog \"Your product usage period has not started yet!\" with title \"Error\"'"
+            os.system(command_str)
+        elif platform == "linux":
+            logger.debug("Usage period error message not implemented for Linux yet")
+
+        return False
     time_left = valid_till_time - time_now
     logger.debug(f'Time Left - {time_left}')
     logger.debug(f'Days left - {time_left.days}')
@@ -128,8 +138,8 @@ HUNDRED_CRORE = 10000000000
 DURATION = 5 #Mins
 MAX_CUMULATIVE_TURNOVER = 100000000
 MIN_CUMULATIVE_TURNOVER = 20000000
-PERCENT_UP = 1 #Percent
-PERCENT_DOWN = -1 #Percent
+PERCENT_UP = 0.25 #Percent
+PERCENT_DOWN = -0.25 #Percent
 MARKET_OPEN_DURATION = 375 #Mins
 DELIVERY_CHANGE_DURATION = 30 #Mins
 RISK_FREE_INT_RATE = 5 #Percent
@@ -257,8 +267,11 @@ eq_df = pd.DataFrame({"Index Symbol":kite.equity_market_categories})
 eq_df = eq_df.set_index("Index Symbol", drop=True)
 eq.range("A1").value = eq_df
 eq.range("A1:A50").autofit()
-eq.range("D2").value, eq.range("D3").value = "Enter Index ->", "Enter Equity ->"
-eq.range("E2").value = eq.range("A2").value
+eq.range("D2").value = "Index Symbol"
+#eq.range("D3").value = "Enter Equity ->"
+#eq.range("E2").value = eq.range("A2").value
+eq.range("E2").value = login.index_symbol
+logger.debug(f"Selected Index in kitedata - {login.index_symbol}")
 eq.range('D2').font.bold = True
 eq.range('D3').font.bold = True
 eq.range('A40:G40').color = COLOR_GREY
@@ -269,8 +282,8 @@ eq.range("F1").autofit()
 eq.range("F2").value = "Index Value"
 eq.range('F2').font.bold = True
 #pre_ind_sym = pre_eq_sym = None
-eq.range("F3").value = "Equity Value"
-eq.range('F3').font.bold = True
+#eq.range("F3").value = "Equity Value"
+#eq.range('F3').font.bold = True
 eq.range("D2:E3").autofit()
 logger.debug("EquityData sheet initialized")
 
@@ -1236,7 +1249,9 @@ while True:
     eq_df = None
     if ind_sym is not None:
         #eq_df = nse.equity_market_data(ind_sym)
-        eq_df = kite.get_nifty50_market_data()
+        #eq_df = kite.get_nifty50_market_data()
+        logger.debug(f"Final Index sent - {ind_sym}")
+        eq_df = kite.get_equity_market_data(ind_sym)
         if eq_df is not None:
             #eq_df.drop(["priority","date365dAgo","chart365dPath","date30dAgo","chart30dPath","chartTodayPath","series","identifier"],
                        #axis=1,inplace=True)

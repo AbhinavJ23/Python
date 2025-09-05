@@ -39,6 +39,11 @@ class SupportResistance:
         from_date = today - datetime.timedelta(days=2)
         to_date = today - datetime.timedelta(days=1)
 
+        # If to_date is Saturday or Sunday, adjust to_date to last Friday and from_date to last Thursday
+        if to_date.weekday() >= 5:
+            to_date = to_date - datetime.timedelta(days=to_date.weekday() - 4)
+            from_date = from_date - datetime.timedelta(days=from_date.weekday() - 3)
+
         for symbol in nifty_50_symols:
             try:
                 token = nse_map[symbol]
@@ -59,7 +64,6 @@ class SupportResistance:
         df = pd.DataFrame(data, columns=["Stock", "Support", "Resistance"])
         df.set_index("Stock", inplace=True)
         df = df.transpose()  # Support is first row, Resistance second
-        #logger.debug(df)
         return df
 
     def save_to_excel(self, df):

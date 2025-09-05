@@ -1,0 +1,42 @@
+class NseIndex:
+    def __init__(self):
+        self.index_symbols = ['NIFTY 50', 'NIFTY NEXT 50', 'NIFTY MIDCAP 50', 'NIFTY SMALLCAP 50']
+        self.nifty_50_symbols = [
+            "ADANIENT", "ADANIPORTS", "APOLLOHOSP", "ASIANPAINT", "AXISBANK", "BAJAJ-AUTO",
+            "BAJFINANCE", "BAJAJFINSV", "BEL", "BHARTIARTL",
+            "CIPLA", "COALINDIA", "DRREDDY", "EICHERMOT", "ETERNAL",
+            "GRASIM", "HCLTECH", "HDFCBANK", "HDFCLIFE", "HEROMOTOCO",
+            "HINDALCO", "HINDUNILVR", "ICICIBANK", "INDUSINDBK",
+            "INFY", "ITC", "JIOFIN", "JSWSTEEL", "KOTAKBANK", "LT",
+            "M&M", "MARUTI", "NESTLEIND", "NIFTY 50", "NTPC", "ONGC",
+            "POWERGRID", "RELIANCE", "SBILIFE", "SBIN", "SHRIRAMFIN", "SUNPHARMA",
+            "TATACONSUM", "TATAMOTORS", "TATASTEEL", "TCS", "TECHM",
+            "TITAN", "TRENT", "ULTRACEMCO", "WIPRO"
+        ]
+        self.nifty_next_50_symbols = [
+            "ABB", "ADANIENSOL", "ADANIGREEN", "ADANIPOWER", "AMBUJACEM", "BAJAJHFL", "BAJAJHLDNG",
+            "BANKBARODA", "BOSCHLTD", "BPCL", "BRITANNIA", "CANBK", "CGPOWER", "CHOLAFIN", "DABUR",
+            "DIVISLAB", "DLF", "DMART", "GAIL", "GODREJCP", "HAL", "HAVELLS", "HYUNDAI", "ICICIGI",
+            "ICICIPRULI", "INDHOTEL", "INDIGO", "IOC", "IRFC", "JINDALSTEL", "JSWENERGY", "LICI",
+            "LODHA", "LTIM", "MOTHERSON", "NAUKRI", "NIFTY NEXT 50", "PFC", "PIDILITIND", "PNB",
+            "RECLTD", "SHREECEM", "SIEMENS", "SWIGGY", "TATAPOWER", "TORNTPHARM", "TVSMOTOR",
+            "UNITDSPR", "VBL", "VEDL", "ZYDUSLIFE"
+        ]
+        self.nifty_midcap_50_symbols = [
+            "ALKEM", "ASHOKLEY", "ASTRAL", "AUBANK", "AUROPHARMA", "BHARATFORG", "BHEL", "BSE",
+            "COFORGE", "COLPAL", "CONCOR", "CUMMINSIND", "DIXON", "FEDERALBNK", "GMRAIRPORT",
+            "GODREJPROP", "HDFCAMC", "HINDPETRO", "IDEA", "IDFCFIRSTB", "INDUSTOWER", "IRCTC",
+            "LUPIN", "MARICO", "MAXHEALTH", "MPHASIS", "MRF", "MUTHOOTFIN", "NHPC", "NIFTY MIDCAP 50",
+            "NMDC", "OBEROIRLTY", "OFSS", "OIL", "PAGEIND", "PAYTM", "PERSISTENT", "PETRONET",
+            "PHOENIXLTD", "PIIND", "POLICYBZR", "POLYCAB", "PRESTIGE", "SAIL", "SBICARD", "SRF",
+            "SUPREMEIND", "TIINDIA", "TORNTPOWER", "VOLTAS", "YESBANK"
+        ]
+        self.nifty_smallcap_50_symbols = [
+            "AARTIIND", "ABREL", "AEGISLOG", "AFFLE", "AMBER", "ANGELONE", "ARE&M", "ASTERDM",
+            "BRIGADE", "BSOFT", "CAMS", "CASTROLIND", "CDSL", "CESC", "CROMPTON", "CYIENT",
+            "DELHIVERY", "FIVESTAR", "FSL", "GESHIP", "GSPL", "HFCL", "HINDCOPPER", "HSCL", "IEX",
+            "IIFL", "INOXWIND", "KAYNES", "KEC", "KFINTECH", "LALPATHLAB", "LAURUSLABS", "MCX",
+            "NATCOPHARM", "NAVINFLUOR", "NBCC", "NCC", "NEULANDLAB", "NIFTY SMALLCAP 50", "PEL",
+            "PNBHOUSING", "POONAWALLA", "PPLPHARMA", "RADICO", "RAMCOCEM", "RKFORGE", "RPOWER",
+            "SONATSOFTW", "TATACHEM", "TEJASNET", "ZENSARTECH"
+        ]
