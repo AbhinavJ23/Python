@@ -8,6 +8,7 @@ from baselogger import logger
 import ctypes
 from baselogin import Login
 from kitemain import KiteMain
+from supportresistance import SupportResistance
 
 # Start - Call splash to show program loading
 if getattr(sys, 'frozen', False):
@@ -15,7 +16,7 @@ if getattr(sys, 'frozen', False):
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '01/09/2025 00:00:00'
+    valid_from_str = '07/09/2025 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     valid_till_time = valid_from_time + timedelta(days=30)
     time_now = datetime.now()
@@ -208,7 +209,17 @@ cfg.range('A8').value = "Support"
 cfg.range('A8').font.bold = True
 cfg.range('A9').value = "Resistance"
 cfg.range('A9').font.bold = True
+
+# Getting Support and Resistance data for selected Index stocks
+support_resistance = SupportResistance()
+sr_df = support_resistance.calculate_support_resistance(login.index_symbol)
+if sr_df is not None:
+    cfg.range('B7').options(index=False).value = sr_df
+else:
+    logger.error(f'Error getting Support and Resistance dataframe for {login.index_symbol}')
+
 cfg.range('A11:CZ11').color = COLOR_GREY
+
 """
 cfg.range('A12').value = "OPTIONS"
 cfg.range('A12').font.bold = True
@@ -222,6 +233,7 @@ cfg.range('A14').value = "Risk Free Interest Rate"
 cfg.range('A14').font.bold = True
 cfg.range('B14').value = RISK_FREE_INT_RATE
 cfg.range('C14').value = "%"
+
 """
 logger.debug("Configurations sheet initialized")
 
@@ -857,51 +869,52 @@ def create_price_vol_sheets(df, time, row_number_1):
             ## Check difference between previous cumulative volume and current cumulative volume along with current cumulative price
             #if (cum_price_diff_dict[key] - prev_cum_price_diff_dict[key]) == 0:
             if cum_price_diff_dict[key] == 0:
-                puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Neutral"
+                #puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Neutral"
+                puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = df.loc[key, 'last_price']
                 puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_YELLOW
                 if (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) == 0:
-                    puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Neutral"
+                    puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = df.loc[key, 'volume']
                     puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_YELLOW
                 elif (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) > 0:
-                    puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Up"
+                    puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = df.loc[key, 'volume']
                     puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_GREEN
                 else:
-                    puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Down"
+                    puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = df.loc[key, 'volume']
                     puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_RED      
             elif (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) == 0:
                 if cum_price_diff_dict[key] > 0:
-                    puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Up"
+                    puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = df.loc[key, 'last_price']
                     puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_GREEN
                 else:
-                    puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Down"
+                    puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = df.loc[key, 'last_price']
                     puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_RED                  
-                puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Neutral"
+                puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = df.loc[key, 'volume']
                 puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_YELLOW
             elif cum_price_diff_dict[key] < 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) < 0:
-                puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Down"
+                puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = df.loc[key, 'last_price']
                 puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_RED
-                puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Down"
+                puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = df.loc[key, 'volume']
                 puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_RED
                 #Building Data for Price Down, Volume Down
                 price_vol_down_list.append(key)
             elif cum_price_diff_dict[key] < 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) > 0:
-                puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Down"
+                puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = df.loc[key, 'last_price']
                 puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_RED
-                puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Up"
+                puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = df.loc[key, 'volume']
                 puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_GREEN
                 #Building Data for Price Down, Volume Up
                 price_down_vol_up_list.append(key)
             elif cum_price_diff_dict[key] > 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) > 0:
-                puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Up"
+                puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = df.loc[key, 'last_price']
                 puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_CYAN
-                puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Up"
+                puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = df.loc[key, 'volume']
                 puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_CYAN
                 #Building Data for Price Up, Volume Up
                 price_vol_up_list.append(key)
             elif cum_price_diff_dict[key] > 0 and (cum_vol_diff_dict[key] - prev_cum_vol_diff_dict[key]) < 0:
-                puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = "Up"
+                puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).value = df.loc[key, 'last_price']
                 puvu.range(f'{get_col_name(col_number_2)}' + str(row_number_1)).color = COLOR_GREEN
-                puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = "Down"
+                puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).value = df.loc[key, 'volume']
                 puvu.range(f'{get_col_name(col_number_2+1)}' + str(row_number_1)).color = COLOR_RED
                 #Building Data for Price Up, Volume Down
                 price_up_vol_down_list.append(key)
