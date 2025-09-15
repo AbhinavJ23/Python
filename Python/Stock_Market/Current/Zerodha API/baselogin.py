@@ -16,7 +16,7 @@ class Login:
         self.index_symbol = None
         ctk.set_appearance_mode("dark")
         self.app = ctk.CTk()
-        self.app.geometry("400x400")
+        self.app.geometry("550x550")
         self.app.title("Application Login")
         self.app.eval('tk::PlaceWindow . center')
 

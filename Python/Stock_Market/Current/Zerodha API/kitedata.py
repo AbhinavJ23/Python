@@ -9,6 +9,7 @@ import ctypes
 from baselogin import Login
 from kitemain import KiteMain
 from supportresistance import SupportResistance
+from apiauth import APIAuth
 
 # Start - Call splash to show program loading
 if getattr(sys, 'frozen', False):
@@ -16,7 +17,7 @@ if getattr(sys, 'frozen', False):
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '07/09/2025 00:00:00'
+    valid_from_str = '11/09/2025 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     valid_till_time = valid_from_time + timedelta(days=30)
     time_now = datetime.now()
@@ -65,6 +66,9 @@ def check_validity():
 if getattr(sys, 'frozen', False):
     pyi_splash.close()
 
+# Check API Authentications (generate API Key, API Secret, Request Token, Access Token)
+api_auth = APIAuth()
+
 # Show login screen
 login = Login()
 
@@ -73,12 +77,12 @@ if login.is_logged_in:
     logger.debug("Logged in. Proceeding further....")
 else:
     logger.error("Not Logged in. Exiting....")
-    sys.exit()
+    sys.exit(1)
 
 # Check validity and expiry
 status = check_validity()
 if not status:
-   sys.exit()
+   sys.exit(1)
 
 # All good. Proceeding with Kite Data
 kite = KiteMain()
@@ -105,7 +109,7 @@ if not os.path.exists(file_name):
         logger.debug("Created Excel - " + file_name)
     except Exception as e:
         logger.critical(f'Error Creating Excel - {e}')
-        sys.exit()
+        sys.exit(1)
 
 wb = xw.Book(file_name)
 cfg = wb.sheets("Configuration")
@@ -1217,7 +1221,7 @@ while True:
         PERCENT_DOWN = cfg.range('F4').value
     except Exception as e:
         logger.debug(f'Closing Excel and handling exception - {e}')
-        sys.exit()
+        sys.exit(1)
     
     """
     if pre_ind_sym is not None and pre_ind_sym != ind_sym:

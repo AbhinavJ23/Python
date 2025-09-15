@@ -10,6 +10,8 @@ from nseindex import NseIndex
 class SupportResistance:
     def __init__(self):
         self.kite_login = KiteLogin()
+        self.kite_login.load_credentials()
+        self.kite_login.load_access_token()
         self.api_key = self.kite_login.get_api_key()
         self.access_token = self.kite_login.get_access_token()
         self.kite = KiteConnect(api_key=self.api_key)

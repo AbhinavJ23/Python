@@ -8,10 +8,13 @@ class KiteMain:
     #equity_market_categories = ['NIFTY 50', 'NIFTY NEXT 50', 'NIFTY 100', 'NIFTY 200', 'NIFTY 500', 'NIFTY MIDCAP 50', 'NIFTY MIDCAP 100', 'NIFTY SMALLCAP 100', 'NIFTY SMALLCAP 50', 'NIFTY SMALLCAP 250', 'NIFTY TOTAL MARKET', 'NIFTY BANK', 'NIFTY AUTO', 'NIFTY FMCG', 'NIFTY IT', 'NIFTY METAL', 'NIFTY PHARMA', 'NIFTY PSU BANK', 'NIFTY PRIVATE BANK', 'NIFTY REALTY', 'NIFTY HEALTHCARE INDEX', 'NIFTY CONSUMER DURABLES', 'NIFTY OIL & GAS']
     def __init__(self):
         self.kite_login = KiteLogin()
+        self.kite_login.load_credentials()
+        self.kite_login.load_access_token()
         self.api_key = self.kite_login.get_api_key()
         self.access_token = self.kite_login.get_access_token()
         self.kite = KiteConnect(api_key=self.api_key)
         self.kite.set_access_token(self.access_token)
+
         self.index = NseIndex()
         self.equity_market_categories = self.index.index_symbols
         self.nifty50_symbols = self.index.nifty_50_symbols
@@ -19,7 +22,6 @@ class KiteMain:
         self.niftymidcap_50_symbols = self.index.nifty_midcap_50_symbols
         self.niftysmallcap_50_symbols = self.index.nifty_smallcap_50_symbols
 
-    #def get_nifty50_market_data(self):
     def get_equity_market_data(self, index_symbol):
         if index_symbol not in self.equity_market_categories:
             logger.error(f"Invalid index symbol: {index_symbol}")
@@ -37,28 +39,9 @@ class KiteMain:
         else:
             logger.error(f"Market data for {index_symbol} is not implemented.")
             return None
-        # Get all NSE instruments
-        #instruments = self.kite.instruments(exchange="NSE")
-        # Static NIFTY 50 symbols list
-        """
-        nifty50_symbols = [
-            "ADANIENT", "ADANIPORTS", "APOLLOHOSP", "ASIANPAINT", "AXISBANK", "BAJAJ-AUTO",
-            "BAJFINANCE", "BAJAJFINSV", "BEL", "BHARTIARTL",
-            "CIPLA", "COALINDIA", "DRREDDY", "EICHERMOT", "ETERNAL",
-            "GRASIM", "HCLTECH", "HDFCBANK", "HDFCLIFE", "HEROMOTOCO",
-            "HINDALCO", "HINDUNILVR", "ICICIBANK", "INDUSINDBK",
-            "INFY", "ITC", "JIOFIN", "JSWSTEEL", "KOTAKBANK", "LT",
-            "M&M", "MARUTI", "NESTLEIND", "NIFTY 50", "NTPC", "ONGC",
-            "POWERGRID", "RELIANCE", "SBILIFE", "SBIN", "SHRIRAMFIN", "SUNPHARMA",
-            "TATACONSUM", "TATAMOTORS", "TATASTEEL", "TCS", "TECHM",
-            "TITAN", "TRENT", "ULTRACEMCO", "WIPRO"
-        ]
-        """
 
         # Prepend 'NSE:' to each symbol
         symbols = [f"NSE:{symbol}" for symbol in symbols]
-        #nifty = self.kite.quote('NSE:NIFTY 50')#['NSE:NIFTY 50']
-        #print(nifty)
         market_data = []
         try:
             for sym in symbols:
@@ -86,7 +69,6 @@ class KiteMain:
         counter = 0
         for data in market_data:
             market_data_dict['symbol'].append(symbols[counter][4:])  # Remove 'NSE:' prefix
-            #market_data_dict['symbol'].append(market_data[counter].keys()) #.split(':')[1])
             market_data_dict['open'].append(data['ohlc']['open'])
             market_data_dict['high'].append(data['ohlc']['high'])
             market_data_dict['low'].append(data['ohlc']['low'])
@@ -95,7 +77,7 @@ class KiteMain:
             market_data_dict['change'].append(data['last_price'] - data['ohlc']['close'])
             market_data_dict['percent_change'].append(round(((data['last_price'] - data['ohlc']['close']) / data['ohlc']['close']) * 100, 2))
             market_data_dict['timestamp'].append(data.get('timestamp', None))
-            #if symbols[counter] != 'NSE:NIFTY 50' and symbols[counter] != 'NSE:NIFTY NEXT 50' and symbols[counter] != 'NSE:NIFTY MIDCAP 50' and symbols[counter] != 'NSE:NIFTY SMALLCAP 50':
+
             if symbols[counter] not in [f"NSE:{sym}" for sym in self.equity_market_categories]:
                 market_data_dict['buy_quantity'].append(data['buy_quantity'])
                 market_data_dict['sell_quantity'].append(data['sell_quantity'])
@@ -110,5 +92,4 @@ class KiteMain:
 
         market_data_df = pd.DataFrame(market_data_dict)
         market_data_df.set_index('symbol', inplace=True)
-        #logger.debug(market_data_df)
         return market_data_df
