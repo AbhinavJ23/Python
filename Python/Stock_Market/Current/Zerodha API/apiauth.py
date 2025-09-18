@@ -33,7 +33,7 @@ class APIAuth():
         else:
             # First-time setup → Ask user for API Key and Secret
             logger.debug("No API Key and API Secret found, asking user to input them.")
-            self.label = ctk.CTkLabel(master=self.frame, text="Enter API Key and API Secret")
+            self.label = ctk.CTkLabel(master=self.frame, text="Login to Zerodha Kite Developers portal and Enter API Key and API Secret")
             self.label.pack(pady=10)
 
             self.api_key_entry = ctk.CTkEntry(master=self.frame, placeholder_text="API Key", width=250)

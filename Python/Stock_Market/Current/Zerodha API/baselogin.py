@@ -59,6 +59,7 @@ class Login:
         self.button3.pack(padx=12, pady=0)
 
         self.system_info = platform.uname()
+        #logger.debug(f'System Info: {self.system_info}')
         self.system = self.system_info.system
         self.node = self.system_info.node
 
