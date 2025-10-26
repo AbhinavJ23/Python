@@ -17,7 +17,7 @@ if getattr(sys, 'frozen', False):
 
 ############################# Start - Function to check validity,expiry #############################
 def check_validity():
-    valid_from_str = '17/09/2025 00:00:00'
+    valid_from_str = '25/10/2025 00:00:00'
     valid_from_time = datetime.strptime(valid_from_str, '%d/%m/%Y %H:%M:%S')
     valid_till_time = valid_from_time + timedelta(days=30)
     time_now = datetime.now()
