@@ -21,6 +21,7 @@ class KiteMain:
         self.niftynext_50_symbols = self.index.nifty_next_50_symbols
         self.niftymidcap_50_symbols = self.index.nifty_midcap_50_symbols
         self.niftysmallcap_50_symbols = self.index.nifty_smallcap_50_symbols
+        self.nifty100_symbols = self.index.nifty_100_symbols
 
     def get_equity_market_data(self, index_symbol):
         if index_symbol not in self.equity_market_categories:
@@ -36,6 +37,8 @@ class KiteMain:
             symbols = self.niftymidcap_50_symbols
         elif index_symbol == 'NIFTY SMALLCAP 50':
             symbols = self.niftysmallcap_50_symbols
+        elif index_symbol == 'NIFTY 100':
+            symbols = self.nifty100_symbols
         else:
             logger.error(f"Market data for {index_symbol} is not implemented.")
             return None
