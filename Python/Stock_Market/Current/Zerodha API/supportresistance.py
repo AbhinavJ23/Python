@@ -23,6 +23,7 @@ class SupportResistance:
         self.niftynext_50_symbols = self.index.nifty_next_50_symbols
         self.niftymidcap_50_symbols = self.index.nifty_midcap_50_symbols
         self.niftysmallcap_50_symbols = self.index.nifty_smallcap_50_symbols
+        self.nifty100_symbols = self.index.nifty_100_symbols
 
     def calculate_support_resistance(self, index_symbol):
 
@@ -35,6 +36,8 @@ class SupportResistance:
             symbols = self.niftymidcap_50_symbols
         elif index_symbol == 'NIFTY SMALLCAP 50':
             symbols = self.niftysmallcap_50_symbols
+        elif index_symbol == 'NIFTY 100':
+            symbols = self.nifty100_symbols
         else:
             logger.error(f"Support Resistance for {index_symbol} is not implemented.")
             return None
