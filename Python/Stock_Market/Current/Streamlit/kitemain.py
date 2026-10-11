@@ -1,4 +1,5 @@
 import pandas as pd
+from datetime import datetime
 
 def fetch_live_quotes(symbol_list, kite_instance):
     """
@@ -20,15 +21,17 @@ def fetch_live_quotes(symbol_list, kite_instance):
             # Map parameters matching your exact screening requirements
             parsed_records.append({
                 "Stock Symbol": clean_symbol,
+                #"Time": metrics.get("timestamp", ""),
+                "Time": datetime.strftime(metrics.get("timestamp", datetime.now()), "%d-%m-%Y %H:%M:%S") if metrics.get("timestamp") else "",
                 "Open": round(metrics.get("ohlc", {}).get("open", 0.0), 2),
                 "Day High": round(metrics.get("ohlc", {}).get("high", 0.0), 2),
                 "Day Low": round(metrics.get("ohlc", {}).get("low", 0.0), 2),
-                "Close": round(metrics.get("ohlc", {}).get("close", 0.0), 2),
+                "Previous Close": round(metrics.get("ohlc", {}).get("close", 0.0), 2),
                 "Last Price": round(metrics.get("last_price", 0.0), 2),
-                "Change": round(metrics.get("change", 0.0), 2),
-                "Change (%)": round(metrics.get("change", 0.0), 2),
+                "Change": round(metrics.get("net_change", 0.0), 2),
+                "Change (%)": round(metrics.get("change", 0.0)/metrics.get("ohlc", {}).get("close", 1.0) * 100, 2) if metrics.get("ohlc", {}).get("close", 0.0) != 0 else 0.0,
                 "Volume": metrics.get("volume", 0),
-                "Turnover": round(metrics.get("oi", 0.0), 2), # Using OI or turnover fields based on tracking preference
+                "Turnover": round(metrics.get("volume", 0) * metrics.get("last_price", 0.0), 2), # Cumulative turnover in INR
             })
             
         return pd.DataFrame(parsed_records)

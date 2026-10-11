@@ -4,15 +4,16 @@ from datetime import datetime
 from baselogger import logger
 
 def process_market_pass(df_live_ticks, df_sr_baselines, previous_pass_data, config):
-    """
-    Core math transformation engine replacing Excel sheet coordinate macros.
     
+    logger.debug("Processing market pass with live ticks and support/resistance baselines.")
+
+    """
     config dict keys expected: 
       - 'max_turnover_limit' (e.g., 100000000 for 10 Crore)
       - 'min_turnover_limit' (e.g., 20000000 for 2 Crore)
       - 'price_alert_percentage' (e.g., 0.5 for 0.5%)
     """
-    timestamp_str = datetime.now().strftime("%H:%M")
+    timestamp_str = datetime.now().strftime("%H:%M:%S")
     
     # 1. Clean and transform incoming tick matrix data
     current_pass_records = {}
@@ -55,6 +56,7 @@ def process_market_pass(df_live_ticks, df_sr_baselines, previous_pass_data, conf
         
         # --- LOGIC 1: MAX CUMULATIVE TURNOVER FILTER ---
         if interval_turnover >= config['max_turnover_limit']:
+            logger.debug(f"Stock {sym} passed MAX turnover filter: Interval Turnover={interval_turnover}, Price Shift={price_pct_shift}%")
             max_turnover_list.append({
                 "Stock Name": sym,
                 "Cumulative Turnover (Interval)": round(interval_turnover, 2),
@@ -65,6 +67,7 @@ def process_market_pass(df_live_ticks, df_sr_baselines, previous_pass_data, conf
             
         # --- LOGIC 2: MIN CUMULATIVE TURNOVER FILTER ---
         if interval_turnover <= config['min_turnover_limit'] and interval_turnover > 0:
+            logger.debug(f"Stock {sym} passed MIN turnover filter: Interval Turnover={interval_turnover}, Price Shift={price_pct_shift}%")
             min_turnover_list.append({
                 "Stock Name": sym,
                 "Cumulative Turnover (Interval)": round(interval_turnover, 2),
@@ -105,10 +108,12 @@ def process_market_pass(df_live_ticks, df_sr_baselines, previous_pass_data, conf
 
         # Condition 4: Price Up & Volume Up
         if curr_price > prev_price and curr_vol > prev_vol:
+            logger.debug(f"Price Up & Volume Up detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
             puvu_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
             
         # Condition 5: Price Down & Volume Down
         elif curr_price < prev_price and curr_vol < prev_vol:
+            logger.debug(f"Price Down & Volume Down detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
             pdvd_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
 
     return {
@@ -118,8 +123,6 @@ def process_market_pass(df_live_ticks, df_sr_baselines, previous_pass_data, conf
         "pdvd_list": pdvd_list,
         "raw_pass_state": current_pass_records
     }
-
-# kitedata.py (Add this function at the bottom of the file)
 
 def generate_transposed_dashboard(historical_pass_list, symbol_list):
     """
@@ -155,5 +158,6 @@ def generate_transposed_dashboard(historical_pass_list, symbol_list):
     volume_cols = [c for c in df_transposed.columns if c.endswith(" V")]
     if volume_cols:
         df_transposed["Total Volume Traded"] = df_transposed[volume_cols].sum(axis=1)
-        
+
+    logger.debug("Generated transposed dashboard matrix with historical data.")
     return df_transposed
