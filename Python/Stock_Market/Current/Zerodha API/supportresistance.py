@@ -55,7 +55,6 @@ class SupportResistance:
                     "TITAN", "TRENT", "ULTRACEMCO", "WIPRO"
         ]
         """
-
         # Get instrument tokens
         instruments = self.kite.instruments("NSE")
         nse_map = {i['tradingsymbol']: i['instrument_token'] for i in instruments if i['tradingsymbol'] in symbols}
@@ -108,4 +107,4 @@ class SupportResistance:
         wb = xw.Book(file_name)
         sr = wb.sheets(index_symbol)
         sr.range("A1").value = df
-        logger.debug(f"Support and Resistance data for {index_symbol} saved to Excel file.")
+        logger.debug(f"Support and Resistance data for {index_symbol} has been saved to Excel file.")
