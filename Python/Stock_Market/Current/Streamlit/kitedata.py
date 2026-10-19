@@ -58,9 +58,10 @@ def process_market_pass(df_live_ticks, df_sr_baselines, previous_pass_data, conf
         if interval_turnover >= config['max_turnover_limit']:
             logger.debug(f"Stock {sym} passed MAX turnover filter: Interval Turnover={interval_turnover}, Price Shift={price_pct_shift}%")
             max_turnover_list.append({
+                "Time": timestamp_str,
                 "Stock Name": sym,
-                "Cumulative Turnover (Interval)": round(interval_turnover, 2),
-                "Price": ltp,
+                "Cumulative Turnover (Interval)": round(interval_turnover/10000000, 2),
+                "Price": round(ltp,2),
                 "Price Shift (%)": round(price_pct_shift, 2),
                 "Status": price_status
             })
@@ -69,9 +70,10 @@ def process_market_pass(df_live_ticks, df_sr_baselines, previous_pass_data, conf
         if interval_turnover <= config['min_turnover_limit'] and interval_turnover > 0:
             logger.debug(f"Stock {sym} passed MIN turnover filter: Interval Turnover={interval_turnover}, Price Shift={price_pct_shift}%")
             min_turnover_list.append({
+                "Time": timestamp_str,
                 "Stock Name": sym,
-                "Cumulative Turnover (Interval)": round(interval_turnover, 2),
-                "Price": ltp,
+                "Cumulative Turnover (Interval)": round(interval_turnover/10000000, 2),
+                "Price": round(ltp,2),
                 "Price Shift (%)": round(price_pct_shift, 2),
                 "Status": price_status
             })

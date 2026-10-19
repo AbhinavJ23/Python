@@ -251,7 +251,7 @@ else:
             st.success(f"🔒 Trial Active: **{days_remaining} Days Left**")
         # -----------------------------------------------
         st.info(f"📊 Tracking Index: {st.session_state.selected_index_name}")
-        st.caption(f"Loaded Watchlist Count: {len(st.session_state.selected_symbols)} Stocks")
+        #st.caption(f"Loaded Watchlist Count: {len(st.session_state.selected_symbols)} Stocks")
 
         #st.markdown("---")
         st.markdown("### ⚙️ Screening Configurations")
@@ -269,7 +269,7 @@ else:
             'price_alert_percentage': alert_pct
         }
         
-        if st.button("🚪 Terminate Session & Log Out"):
+        if st.button("🚪Log Out"):
             # Clear cached items to ensure full resets on profile swap
             if "sr_matrix_dataframe" in st.session_state:
                 del st.session_state.sr_matrix_dataframe
@@ -284,8 +284,10 @@ else:
         st.session_state.dashboard_history = pd.DataFrame()
         st.session_state.puvu_history = pd.DataFrame()
         st.session_state.pdvd_history = pd.DataFrame()
-        st.session_state.max_turnover_current = pd.DataFrame()
-        st.session_state.min_turnover_current = pd.DataFrame()
+        #st.session_state.max_turnover_current = pd.DataFrame()
+        #st.session_state.min_turnover_current = pd.DataFrame()
+        st.session_state.max_turnover_history = pd.DataFrame() 
+        st.session_state.min_turnover_history = pd.DataFrame()
         st.session_state.last_pass_timestamp = datetime.now()
         st.session_state.historical_passes = []
 
@@ -319,12 +321,16 @@ else:
             logger.debug("S/R matrix initialized successfully.")
 
     # NEW COMPACT SUMMARY LAYER: TOP 5 GAINERS & LOSERS OF THE DAY
-    # SPLIT HEADER FOR LEADERS AND LIVE CLOCK
-    # Creates two side-by-side columns: large space for title, small space for the time ticker
-    col_title, col_clock = st.columns([3, 1])
+    # SPLIT HEADER FOR LEADERS, INDEX AND LIVE CLOCK
+    
+    #col_title, col_clock = st.columns([3, 1])
+    col_title, col_index, col_clock = st.columns([2, 2, 1])
     with col_title:
         st.markdown("##### 📊 Today's Market Leaders")
     
+    with col_index:
+        index_placeholder = st.empty()
+
     with col_clock:
         import streamlit.components.v1 as components
         
@@ -430,8 +436,9 @@ else:
     # This loop takes over and streams data continuously onto the screen
     while True:
         # A. Pull fresh ticks via kitemain module passing the active authorized workspace session
-        df_live_ticks = kitemain.fetch_live_quotes(
+        df_live_ticks, index_metrics = kitemain.fetch_live_quotes(
             st.session_state.selected_symbols, 
+            st.session_state.selected_index_name,
             st.session_state.kite
         )
         
@@ -444,6 +451,31 @@ else:
         logger.debug("Live ticks fetched successfully.")
         # Overwrite Tab 1 (Live Tickers Grid) instantly every 3 seconds
         live_ticker_frame.dataframe(df_live_ticks, use_container_width=True, hide_index=True)
+
+        # -----------------------------------------------------------------
+        # 👉 NEW: FORMAT AND INJECT LIVE INDEX SNAPSHOT WITH CONDITIONAL COLORING
+        # -----------------------------------------------------------------
+        idx_price = index_metrics["last_price"]
+        idx_change = index_metrics["change"]
+        
+        # Determine green text for gaining or red for dropping index trends
+        color_hex = "#155724" if idx_change >= 0 else "#721c24"
+        arrow_sign = "▲" if idx_change >= 0 else "▼"
+        plus_sign = "+" if idx_change >= 0 else ""
+        
+        # Overwrite the middle placeholder handle
+        index_placeholder.markdown(
+            f"""
+            <div style='text-align: center; margin-top: 5px; font-family: sans-serif;'>
+                <span style='font-weight: bold; color: #475569; font-size: 0.95rem;'>{st.session_state.selected_index_name}:</span>
+                <span style='font-weight: 700; color: #1e293b; font-size: 1.15rem; margin-left: 5px;'>{idx_price:,.2f}</span>
+                <span style='font-weight: bold; color: {color_hex}; font-size: 1.0rem; margin-left: 8px;'>
+                    {arrow_sign} {plus_sign}{idx_change:.2f}%
+                </span>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
 
         # -----------------------------------------------------------------
         # CALCULATE AND INJECT TOP 5 MOVERS
@@ -490,19 +522,25 @@ else:
             
             # C. Update dynamic state stores securely
             st.session_state.previous_pass_cache = pass_results["raw_pass_state"]
-            st.session_state.max_turnover_current = pass_results["max_turnover_df"]
-            st.session_state.min_turnover_current = pass_results["min_turnover_df"]
+            #st.session_state.max_turnover_current = pass_results["max_turnover_df"]
+            #st.session_state.min_turnover_current = pass_results["min_turnover_df"]
+
+            if not pass_results["max_turnover_df"].empty:
+                st.session_state.max_turnover_history = pd.concat([st.session_state.max_turnover_history, pass_results["max_turnover_df"]]).drop_duplicates().reset_index(drop=True)
+                
+            if not pass_results["min_turnover_df"].empty:
+                st.session_state.min_turnover_history = pd.concat([st.session_state.min_turnover_history, pass_results["min_turnover_df"]]).drop_duplicates().reset_index(drop=True)
             
             # Append historical rows for break registers seamlessly
             if pass_results["puvu_list"]:
                 logger.debug(f"Appending {len(pass_results['puvu_list'])} new Price Up Volume Up entries to history.")
                 df_new_puvu = pd.DataFrame(pass_results["puvu_list"])
-                st.session_state.puvu_history = pd.concat([st.session_state.puvu_history, df_new_puvu]).drop_duplicates()
+                st.session_state.puvu_history = pd.concat([st.session_state.puvu_history, df_new_puvu]).drop_duplicates().reset_index(drop=True)
                 
             if pass_results["pdvd_list"]:
                 logger.debug(f"Appending {len(pass_results['pdvd_list'])} new Price Down Volume Down entries to history.")
                 df_new_pdvd = pd.DataFrame(pass_results["pdvd_list"])
-                st.session_state.pdvd_history = pd.concat([st.session_state.pdvd_history, df_new_pdvd]).drop_duplicates()
+                st.session_state.pdvd_history = pd.concat([st.session_state.pdvd_history, df_new_pdvd]).drop_duplicates().reset_index(drop=True)
                 
             # Reset pass tracking timer baseline checkpoint
             st.session_state.last_pass_timestamp = now
@@ -525,19 +563,38 @@ else:
             elif row.get("Signal") == "YELLOW": style = ['background-color: #fff3cd; color: #856404;'] * len(row)
             return style
 
+
         # Render Tab 3
-        if not st.session_state.max_turnover_current.empty:
-            logger.debug("Rendering Max Cumulative Turnover tab.")
-            max_turnover_placeholder.dataframe(st.session_state.max_turnover_current.style.map(color_price_status, subset=["Status"]), use_container_width=True, hide_index=True)
-        else:
-            max_turnover_placeholder.info("No stocks have passed the Max Turnover threshold in this pass yet.")
+        #if not st.session_state.max_turnover_current.empty:
+        #    logger.debug("Rendering Max Cumulative Turnover tab.")
+        #    max_turnover_placeholder.dataframe(st.session_state.max_turnover_current.style.map(color_price_status, subset=["Status"]).format(precision=2), use_container_width=True, hide_index=True)
+        #else:
+        #    max_turnover_placeholder.info("No stocks have passed the Max Turnover threshold in this pass yet.")
 
         # Render Tab 4
-        if not st.session_state.min_turnover_current.empty:
-            logger.debug("Rendering Min Cumulative Turnover tab.")
-            min_turnover_placeholder.dataframe(st.session_state.min_turnover_current.style.map(color_price_status, subset=["Status"]), use_container_width=True, hide_index=True)
+        #if not st.session_state.min_turnover_current.empty:
+        #    logger.debug("Rendering Min Cumulative Turnover tab.")
+        #    min_turnover_placeholder.dataframe(st.session_state.min_turnover_current.style.map(color_price_status, subset=["Status"]).format(precision=2), use_container_width=True, hide_index=True)
+        #else:
+        #    min_turnover_placeholder.info("No stocks are below the Min Turnover threshold in this pass yet.")
+
+        # --- RENDER TAB 3 (MAX TURNOVER GRID TIMEWISE HISTORICAL) ---
+        if not st.session_state.max_turnover_history.empty:
+            styled_max = st.session_state.max_turnover_history.style.map(
+                color_price_status, subset=["Status"]
+            ).format(precision=2)
+            max_turnover_placeholder.dataframe(styled_max, use_container_width=True, hide_index=True)
         else:
-            min_turnover_placeholder.info("No stocks are below the Min Turnover threshold in this pass yet.")
+            max_turnover_placeholder.info("Awaiting the first completed pass to register timewise Max Turnover records.")
+
+        # --- RENDER TAB 4 (MIN TURNOVER GRID TIMEWISE HISTORICAL) ---
+        if not st.session_state.min_turnover_history.empty:
+            styled_min = st.session_state.min_turnover_history.style.map(
+                color_price_status, subset=["Status"]
+            ).format(precision=2)
+            min_turnover_placeholder.dataframe(styled_min, use_container_width=True, hide_index=True)
+        else:
+            min_turnover_placeholder.info("Awaiting the first completed pass to register timewise Min Turnover records.")
 
         # Render Tab 5 (Excel Dashboard History Grid View)
         # -------------------------------------------------------------
@@ -582,14 +639,14 @@ else:
         # Render Tab 6
         if not st.session_state.puvu_history.empty:
             logger.debug("Rendering Cumulative Price & Volume Gaining Breakouts tab.")
-            puvu_placeholder.dataframe(st.session_state.puvu_history.style.apply(color_sr_signals, axis=1), use_container_width=True, hide_index=True)
+            puvu_placeholder.dataframe(st.session_state.puvu_history.style.apply(color_sr_signals, axis=1).format(precision=2), use_container_width=True, hide_index=True)
         else:
             puvu_placeholder.info("Awaiting the first completed pass to register Price Up & Volume Up breakouts.")
 
         # Render Tab 7
         if not st.session_state.pdvd_history.empty:
             logger.debug("Rendering Cumulative Price & Volume Dropping Breakdowns tab.")
-            pdvd_placeholder.dataframe(st.session_state.pdvd_history.style.apply(color_sr_signals, axis=1), use_container_width=True, hide_index=True)
+            pdvd_placeholder.dataframe(st.session_state.pdvd_history.style.apply(color_sr_signals, axis=1).format(precision=2), use_container_width=True, hide_index=True)
         else:
             pdvd_placeholder.info("Awaiting the first completed pass to register Price Down & Volume Down breakdowns.")
 
