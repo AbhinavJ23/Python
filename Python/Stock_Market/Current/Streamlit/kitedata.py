@@ -85,6 +85,8 @@ def process_market_pass(df_live_ticks, df_sr_baselines, previous_pass_data, conf
     # --- LOGIC 4 & 5: PRICE UP/VOL UP & PRICE DOWN/VOL DOWN SIGNAL PARSER ---
     puvu_list = []
     pdvd_list = []
+    puvd_list = [] 
+    pdvu_list = []
     
     for sym, current_metrics in current_pass_records.items():
         prev_metrics = previous_pass_data.get(sym, {})
@@ -118,11 +120,23 @@ def process_market_pass(df_live_ticks, df_sr_baselines, previous_pass_data, conf
             logger.debug(f"Price Down & Volume Down detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
             pdvd_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
 
+        # Condition 6: Price Up & Volume Down
+        elif curr_price > prev_price and curr_vol < prev_vol:
+            logger.debug(f"Price Up & Volume Down detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
+            puvd_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
+
+        # Condition 7: Price Down & Volume Up
+        elif curr_price < prev_price and curr_vol > prev_vol:
+            logger.debug(f"Price Down & Volume Up detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
+            pdvu_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
+
     return {
         "max_turnover_df": df_max_turnover,
         "min_turnover_df": df_min_turnover,
         "puvu_list": puvu_list,
         "pdvd_list": pdvd_list,
+        "puvd_list": puvd_list,
+        "pdvu_list": pdvu_list,
         "raw_pass_state": current_pass_records
     }
 

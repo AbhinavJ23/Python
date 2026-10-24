@@ -284,6 +284,8 @@ else:
         st.session_state.dashboard_history = pd.DataFrame()
         st.session_state.puvu_history = pd.DataFrame()
         st.session_state.pdvd_history = pd.DataFrame()
+        st.session_state.puvd_history = pd.DataFrame()
+        st.session_state.pdvu_history = pd.DataFrame()
         #st.session_state.max_turnover_current = pd.DataFrame()
         #st.session_state.min_turnover_current = pd.DataFrame()
         st.session_state.max_turnover_history = pd.DataFrame() 
@@ -372,14 +374,16 @@ else:
     #st.markdown("---") # Visual separation line separating summaries from the 7 tabs
 
     # Creating the 4 Tab Views
-    t1, t2, t3, t4, t5, t6, t7 = st.tabs([
+    t1, t2, t3, t4, t5, t6, t7, t8, t9 = st.tabs([
         "🎯 Support / Resistance",
         "🔴 Live Market Data", 
         "🚀 Max Cum. Turnover",
         "📉 Min Cum. Turnover",
         "📊 Price Volume Dashboard",
         "📈 Price Up Volume Up",
-        "📉 Price Down Volume Down" # Replacement tab for your old Excel sheet
+        "📉 Price Down Volume Down",
+        "⚡ Price Up Volume Down",
+        "💥 Price Down Volume Up" 
     ])
 
     # DISPLAY THE DYNAMIC S/R CALCULATIONS FROM THE LIVE API DATA
@@ -430,6 +434,15 @@ else:
         st.markdown("##### 📉 Cumulative Price & Volume Dropping Breakdowns")
         pdvd_placeholder = st.empty()
 
+    with t8:
+        logger.debug("Rendering Cumulative Price Up & Volume Down Divergences tab for selected index.")
+        st.markdown("#### ⚡ Cumulative Price Up & Volume Down Divergences Log")
+        puvd_placeholder = st.empty()
+
+    with t9:
+        logger.debug("Rendering Cumulative Price Down & Volume Up Divergences tab for selected index.")
+        st.markdown("#### 💥 Cumulative Price Down & Volume Up Divergences Log")
+        pdvu_placeholder = st.empty()
     # -----------------------------------------------------------------
     # ⚡ AUTOMATED MULTI-SECOND POLLING AND LIVE INJECTION ENGINE
     # -----------------------------------------------------------------
@@ -541,11 +554,45 @@ else:
                 logger.debug(f"Appending {len(pass_results['pdvd_list'])} new Price Down Volume Down entries to history.")
                 df_new_pdvd = pd.DataFrame(pass_results["pdvd_list"])
                 st.session_state.pdvd_history = pd.concat([st.session_state.pdvd_history, df_new_pdvd]).drop_duplicates().reset_index(drop=True)
+
+            if pass_results["puvd_list"]:
+                logger.debug(f"Appending {len(pass_results['puvd_list'])} new Price Up Volume Down entries to history.")
+                st.session_state.puvd_history = pd.concat([st.session_state.puvd_history, pd.DataFrame(pass_results["puvd_list"])]).drop_duplicates().reset_index(drop=True)
+
+            if pass_results["pdvu_list"]:
+                logger.debug(f"Appending {len(pass_results['pdvu_list'])} new Price Down Volume Up entries to history.")
+                st.session_state.pdvu_history = pd.concat([st.session_state.pdvu_history, pd.DataFrame(pass_results["pdvu_list"])]).drop_duplicates().reset_index(drop=True)
                 
             # Reset pass tracking timer baseline checkpoint
             st.session_state.last_pass_timestamp = now
-            logger.debug("Pass complete! Operational metrics refreshed across tabs.")   
-            st.toast("⏳ Pass complete! Operational metrics refreshed across tabs.", icon="📊")
+            logger.debug("Pass complete! Operational metrics refreshed across tabs.")
+            for list_name, label in [
+                ("puvu_list", "📈 Price Up Volume Up"),
+                ("pdvd_list", "📉 Price Down Volume Down"),
+                ("puvd_list", "⚡ Price Up Volume Down"),
+                ("pdvu_list", "💥 Price Down Volume Up")
+                ]:
+                if pass_results.get(list_name):
+                    for record in pass_results[list_name]:
+                        # Only fire a popup if it breaches Support (RED) or Resistance (GREEN)
+                        if record.get("Signal") in ["GREEN", "RED"]:
+                            sym_name = record["Stock Name"]
+                            ltp_val = record["Price"]
+                            vol_val = record["Volume"]
+                            #turn_val = record["Turnover (Cr)"]
+                            alert_type = "🚀 RESISTANCE BREAKOUT" if record["Signal"] == "GREEN" else "⚠️ SUPPORT BREAKDOWN"
+                                
+                            # Fire an institutional-grade toast notification popup box instantly
+                            st.toast(
+                                f"**{alert_type}**\n\n"
+                                f"📦 **Stock:** {sym_name}\n"
+                                f"💵 **Price:** ₹{ltp_val:,.2f}\n"
+                                f"📊 **Vol:** {vol_val:,}\n"
+                                #f"💰 **Turnover:** {turn_val:.2f} Cr\n"
+                                f"🔍 *Vector:* {label}",
+                                icon="🎯"
+                            )  
+            #st.toast("⏳ Pass complete! Operational metrics refreshed across tabs.", icon="📊")
 
         # D. Display updated states onto respective visual tab frames with color profiles
         # Helper cell color highlighting function for turnover matrix grids
@@ -562,7 +609,6 @@ else:
             elif row.get("Signal") == "RED": style = ['background-color: #f8d7da; color: #721c24; font-weight: bold;'] * len(row)
             elif row.get("Signal") == "YELLOW": style = ['background-color: #fff3cd; color: #856404;'] * len(row)
             return style
-
 
         # Render Tab 3
         #if not st.session_state.max_turnover_current.empty:
@@ -641,14 +687,26 @@ else:
             logger.debug("Rendering Cumulative Price & Volume Gaining Breakouts tab.")
             puvu_placeholder.dataframe(st.session_state.puvu_history.style.apply(color_sr_signals, axis=1).format(precision=2), use_container_width=True, hide_index=True)
         else:
-            puvu_placeholder.info("Awaiting the first completed pass to register Price Up & Volume Up breakouts.")
+            puvu_placeholder.info("Awaiting the first completed pass to register Price Up & Volume Up signals.")
 
         # Render Tab 7
         if not st.session_state.pdvd_history.empty:
             logger.debug("Rendering Cumulative Price & Volume Dropping Breakdowns tab.")
             pdvd_placeholder.dataframe(st.session_state.pdvd_history.style.apply(color_sr_signals, axis=1).format(precision=2), use_container_width=True, hide_index=True)
         else:
-            pdvd_placeholder.info("Awaiting the first completed pass to register Price Down & Volume Down breakdowns.")
+            pdvd_placeholder.info("Awaiting the first completed pass to register Price Down & Volume Down signals.")
+
+        # Render Tab 8 (PriceUp VolumeDown)
+        if not st.session_state.puvd_history.empty:
+            puvd_placeholder.dataframe(st.session_state.puvd_history.style.apply(color_sr_signals, axis=1).format(precision=2), use_container_width=True, hide_index=True)
+        else:
+            puvd_placeholder.info("Awaiting the first completed pass to register Price Up & Volume Down signals.")
+
+        # Render Tab 9 (PriceDown VolumeUp)
+        if not st.session_state.pdvu_history.empty:
+            pdvu_placeholder.dataframe(st.session_state.pdvu_history.style.apply(color_sr_signals, axis=1).format(precision=2), use_container_width=True, hide_index=True)
+        else:
+            pdvu_placeholder.info("Awaiting the first completed pass to register Price Down & Volume Up signals.")
 
         # Frequency throttling barrier (Pausation check matching your few-seconds interval)
         time.sleep(3)
