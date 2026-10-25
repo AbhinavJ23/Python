@@ -361,15 +361,20 @@ else:
         """, height=35)
 
     # Establish a side-by-side split container window layout
-    col_gainers, col_losers = st.columns(2)
+    #col_gainers, col_losers = st.columns(2)
+    col_gainers, col_losers, col_chart = st.columns([1, 1, 2])
     
     with col_gainers:
-        st.markdown("<span style='color:#155724; font-weight:bold;'>▲ Top 5 Daily Gainers</span>", unsafe_allow_html=True)
+        st.markdown("<span style='color:#155724; font-weight:bold;'>▲ Top 5 Gainers</span>", unsafe_allow_html=True)
         gainers_placeholder = st.empty() # Allocation space frame for gainers matrix
         
     with col_losers:
-        st.markdown("<span style='color:#721c24; font-weight:bold;'>▼ Top 5 Daily Losers</span>", unsafe_allow_html=True)
+        st.markdown("<span style='color:#721c24; font-weight:bold;'>▼ Top 5 Losers</span>", unsafe_allow_html=True)
         losers_placeholder = st.empty() # Allocation space frame for losers matrix
+
+    with col_chart:
+        st.markdown(f"<span style='color:#1e293b; font-weight:bold;'>📈 Live {st.session_state.selected_index_name} Intraday Trend</span>", unsafe_allow_html=True)
+        chart_placeholder = st.empty() # Visual canvas allocation for the index trend line
 
     #st.markdown("---") # Visual separation line separating summaries from the 7 tabs
 
@@ -443,6 +448,10 @@ else:
         logger.debug("Rendering Cumulative Price Down & Volume Up Divergences tab for selected index.")
         st.markdown("#### 💥 Cumulative Price Down & Volume Up Divergences Log")
         pdvu_placeholder = st.empty()
+  
+    if "index_chart_history" not in st.session_state:
+        st.session_state.index_chart_history = []
+
     # -----------------------------------------------------------------
     # ⚡ AUTOMATED MULTI-SECOND POLLING AND LIVE INJECTION ENGINE
     # -----------------------------------------------------------------
@@ -514,6 +523,30 @@ else:
             # Update the placeholders safely out of the continuous data flow stream
             gainers_placeholder.dataframe(styled_gainers, use_container_width=True, hide_index=True)
             losers_placeholder.dataframe(styled_losers, use_container_width=True, hide_index=True)
+
+            # -----------------------------------------------------------------
+            # 📊 LIVE INDEX TIME-SERIES CHART GENERATOR
+            # -----------------------------------------------------------------
+            # Append the current index price along with the system time ticker
+            st.session_state.index_chart_history.append({
+                "Time": datetime.now().strftime("%H:%M:%S"),
+                "Price": index_metrics["last_price"]
+            })
+            
+            # Convert history stack to a temporary data frame mapping for rendering
+            df_chart_data = pd.DataFrame(st.session_state.index_chart_history)
+            
+            # Prevent excessive memory consumption by keeping only the last 300 data points (~15 mins of data)
+            if len(df_chart_data) > 300:
+                st.session_state.index_chart_history.pop(0)
+                
+            # Render a native Streamlit line chart that fits perfectly in the right half
+            if not df_chart_data.empty:
+                chart_placeholder.line_chart(
+                    df_chart_data.set_index("Time")["Price"],
+                    use_container_width=True,
+                    height=130 # Tight height parameter prevents displacing the 9 tabs below
+                )
 
         # B. Check if time duration threshold has crossed to lock the current pass
         now = datetime.now()
