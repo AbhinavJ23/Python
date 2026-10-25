@@ -232,9 +232,9 @@ else:
     if not is_trial_valid:
         logger.warning("Trial period has expired. Terminating session and prompting user to log out.")
         st.error(trial_message)
-        st.warning("🔒 This software package execution handle has been terminated.")
+        st.warning("🔒 This software package execution has been terminated.")
         
-        if st.button("Log Out of Profile"):
+        if st.button("Log Out and Exit"):
             st.session_state.user_logged_in = False
             st.rerun()
         st.stop() 
@@ -268,13 +268,42 @@ else:
             'min_turnover_limit': min_crore * 10000000,
             'price_alert_percentage': alert_pct
         }
-        
-        if st.button("🚪Log Out"):
-            # Clear cached items to ensure full resets on profile swap
-            if "sr_matrix_dataframe" in st.session_state:
-                del st.session_state.sr_matrix_dataframe
+
+        if st.button("🚪 Terminate Session & Log Out", use_container_width=True):
+            # 1. Selectively isolate and wipe user-profile specific states only
+            user_keys_to_clear = [
+                "user_logged_in", "current_user", "selected_index_name", 
+                "selected_symbols", "max_turnover_history", "min_turnover_history",
+                "puvu_history", "pdvd_history", "puvd_history", "pdvu_history",
+                "historical_passes", "index_chart_history", "previous_pass_cache",
+                "sr_matrix_dataframe"
+            ]
+            
+            for key in user_keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            # 2. Re-initialize state parameters as clean structures instantly
             st.session_state.user_logged_in = False
+            st.session_state.puvu_history = pd.DataFrame()
+            st.session_state.pdvd_history = pd.DataFrame()
+            st.session_state.puvd_history = pd.DataFrame()
+            st.session_state.pdvu_history = pd.DataFrame()
+            st.session_state.max_turnover_history = pd.DataFrame()
+            st.session_state.min_turnover_history = pd.DataFrame()
+            st.session_state.index_chart_history = []
+            st.session_state.historical_passes = []
+            st.session_state.previous_pass_cache = {}
+            
+            # 3. Seamlessly trigger a screen refresh to bounce the user to Step 3 Sign-In
             st.rerun()
+        
+        #if st.button("🚪Log Out"):
+            # Clear cached items to ensure full resets on profile swap
+        #    if "sr_matrix_dataframe" in st.session_state:
+        #        del st.session_state.sr_matrix_dataframe
+        #    st.session_state.user_logged_in = False
+        #    st.rerun()
     
     #INITIALIZE IN-MEMORY TIME-SERIES DATABASES
     if "sr_matrix_dataframe" not in st.session_state:
@@ -373,7 +402,7 @@ else:
         losers_placeholder = st.empty() # Allocation space frame for losers matrix
 
     with col_chart:
-        st.markdown(f"<span style='color:#1e293b; font-weight:bold;'>📈 Live {st.session_state.selected_index_name} Intraday Trend</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='color:#1e293b; font-weight:bold;'>📈 '{st.session_state.selected_index_name}' Intraday Chart</span>", unsafe_allow_html=True)
         chart_placeholder = st.empty() # Visual canvas allocation for the index trend line
 
     #st.markdown("---") # Visual separation line separating summaries from the 7 tabs
