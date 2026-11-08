@@ -23,8 +23,17 @@ def fetch_live_quotes(symbol_list, index_name, kite_instance):
         for symbol_key, metrics in raw_quotes.items():
             # Check if this row is the master index metric block
             if symbol_key == index_token:
-                index_data["last_price"] = round(metrics.get("last_price", 0.0), 2)
-                index_data["change"] = round(metrics.get("change", 0.0), 2)
+                ltp = metrics.get("last_price", 0.0)
+                prev_close = metrics.get("ohlc", {}).get("close", 0.0)
+                
+                # Calculate true percentage change manually since Zerodha returns 0 for indices
+                if prev_close > 0:
+                    calc_change = ((ltp - prev_close) / prev_close) * 100
+                else:
+                    calc_change = 0.0
+                    
+                index_data["last_price"] = round(ltp, 2)
+                index_data["change"] = round(calc_change, 2)
                 continue
             # Strip out 'NSE:' prefix for a clean visual table layout
             clean_symbol = symbol_key.replace("NSE:", "")
@@ -49,4 +58,5 @@ def fetch_live_quotes(symbol_list, index_name, kite_instance):
         
     except Exception as fetch_error:
         # Gracefully handle transient api drops without breaking the app engine
-        return pd.DataFrame([{"Error": f"Live snapshot failure: {str(fetch_error)}"}])
+        error_df = pd.DataFrame([{"Error": f"Live snapshot failure: {str(fetch_error)}"}])
+        return error_df, index_data

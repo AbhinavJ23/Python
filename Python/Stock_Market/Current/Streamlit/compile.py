@@ -37,7 +37,8 @@ for data_tuple in streamlit_metadata:
 hidden_imports = [
     "--hidden-import=kiteconnect",
     "--hidden-import=pandas",
-    "--hiddenimport=numpy"
+    "--hiddenimport=numpy",
+    "--hidden-import=altair"
 ]
 
 # 5. Formulate the comprehensive institutional packaging command string

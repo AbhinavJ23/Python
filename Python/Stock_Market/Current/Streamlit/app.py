@@ -12,6 +12,7 @@ import kitemain
 import kitedata
 import pandas as pd
 from baselogger import logger
+import altair as alt
 
 st.set_page_config(layout="wide", page_title="Market Screener Framework")
 
@@ -321,6 +322,7 @@ else:
         st.session_state.min_turnover_history = pd.DataFrame()
         st.session_state.last_pass_timestamp = datetime.now()
         st.session_state.historical_passes = []
+        st.session_state.commentary_feed_history = pd.DataFrame()
 
     #st.title("🚀 Real-Time Market Core Screener Matrix Workspace")
     #with st.container(border=False):
@@ -402,13 +404,13 @@ else:
         losers_placeholder = st.empty() # Allocation space frame for losers matrix
 
     with col_chart:
-        st.markdown(f"<span style='color:#1e293b; font-weight:bold;'>📈 '{st.session_state.selected_index_name}' Intraday Chart</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='color:#1e293b; font-weight:bold;'>📈 '{st.session_state.selected_index_name}' Live Chart</span>", unsafe_allow_html=True)
         chart_placeholder = st.empty() # Visual canvas allocation for the index trend line
 
     #st.markdown("---") # Visual separation line separating summaries from the 7 tabs
 
     # Creating the 4 Tab Views
-    t1, t2, t3, t4, t5, t6, t7, t8, t9 = st.tabs([
+    t1, t2, t3, t4, t5, t6, t7, t8, t9, t10 = st.tabs([
         "🎯 Support / Resistance",
         "🔴 Live Market Data", 
         "🚀 Max Cum. Turnover",
@@ -417,7 +419,8 @@ else:
         "📈 Price Up Volume Up",
         "📉 Price Down Volume Down",
         "⚡ Price Up Volume Down",
-        "💥 Price Down Volume Up" 
+        "💥 Price Down Volume Up",
+        "📣 Running Commentary Feed" 
     ])
 
     # DISPLAY THE DYNAMIC S/R CALCULATIONS FROM THE LIVE API DATA
@@ -477,6 +480,10 @@ else:
         logger.debug("Rendering Cumulative Price Down & Volume Up Divergences tab for selected index.")
         st.markdown("#### 💥 Cumulative Price Down & Volume Up Divergences Log")
         pdvu_placeholder = st.empty()
+
+    with t10:
+        st.markdown("#### 📣 Live Support/Resistance Breach Running Commentary Feed")
+        commentary_placeholder = st.empty()
   
     if "index_chart_history" not in st.session_state:
         st.session_state.index_chart_history = []
@@ -570,12 +577,30 @@ else:
                 st.session_state.index_chart_history.pop(0)
                 
             # Render a native Streamlit line chart that fits perfectly in the right half
-            if not df_chart_data.empty:
-                chart_placeholder.line_chart(
-                    df_chart_data.set_index("Time")["Price"],
-                    use_container_width=True,
-                    height=130 # Tight height parameter prevents displacing the 9 tabs below
+
+            # Render a zoomed-in Altair line chart so intraday moves are clearly visible
+            if not df_chart_data.empty and index_metrics["last_price"] > 0:
+                #import altair as alt                
+                # Dynamic color: Green line if index is positive for the day, Red if negative
+                line_color = "#15803d" if index_metrics["change"] >= 0 else "#b91c1c"
+                
+                c = (
+                    alt.Chart(df_chart_data)
+                    .mark_line(color=line_color, strokeWidth=2)
+                    .encode(
+                        x=alt.X(
+                            "Time:N", 
+                            axis=alt.Axis(title=None, labels=True, ticks=True, labelAngle=0, labelOverlap=True)
+                        ),
+                        y=alt.Y(
+                            "Price:Q", 
+                            scale=alt.Scale(zero=False, padding=10), 
+                            axis=alt.Axis(title=None)
+                        )
+                    )
+                    .properties(height=145) # Slightly increased height to fit bottom time labels comfortably
                 )
+                chart_placeholder.altair_chart(c, use_container_width=True)
 
         # B. Check if time duration threshold has crossed to lock the current pass
         now = datetime.now()
@@ -628,6 +653,8 @@ else:
             # Reset pass tracking timer baseline checkpoint
             st.session_state.last_pass_timestamp = now
             logger.debug("Pass complete! Operational metrics refreshed across tabs.")
+
+            new_commentary_entries = []
             for list_name, label in [
                 ("puvu_list", "📈 Price Up Volume Up"),
                 ("pdvd_list", "📉 Price Down Volume Down"),
@@ -653,7 +680,24 @@ else:
                                 #f"💰 **Turnover:** {turn_val:.2f} Cr\n"
                                 f"🔍 *Vector:* {label}",
                                 icon="🎯"
-                            )  
+                            )
+                            new_commentary_entries.append({
+                                    "Time": record["Time"],
+                                    "Stock Name": sym_name,
+                                    "Breach Type": alert_type,
+                                    "Price": ltp_val,
+                                    "Volume": vol_val,
+                                    #"Turnover (Cr)": turn_val,
+                                    "Strategy Vector": label,
+                                    "HighlightKey": record["Signal"] # Hidden mapping column for row colors
+                                })
+                
+                    # Concatenate to global commentary stack chronologically (Newest alert sits at top)
+                    if new_commentary_entries:
+                        df_new_entries = pd.DataFrame(new_commentary_entries)
+                        # Putting new alerts at the TOP makes running commentary easy to read without scrolling down
+                        st.session_state.commentary_feed_history = pd.concat([df_new_entries, st.session_state.commentary_feed_history]).drop_duplicates().reset_index(drop=True)
+            
             #st.toast("⏳ Pass complete! Operational metrics refreshed across tabs.", icon="📊")
 
         # D. Display updated states onto respective visual tab frames with color profiles
@@ -769,6 +813,28 @@ else:
             pdvu_placeholder.dataframe(st.session_state.pdvu_history.style.apply(color_sr_signals, axis=1).format(precision=2), use_container_width=True, hide_index=True)
         else:
             pdvu_placeholder.info("Awaiting the first completed pass to register Price Down & Volume Up signals.")
+
+        # Render Tab 10 (Running Commentary Feed)
+        if not st.session_state.commentary_feed_history.empty:
+            df_comm_display = st.session_state.commentary_feed_history.copy()
+            
+            # Shading helper specifically mapped for the commentary feed
+            def color_commentary_rows(row):
+                style = [''] * len(row)
+                if row.get("HighlightKey") == "GREEN":
+                    style = ['background-color: #d4edda; color: #155724; font-weight: bold;'] * len(row)
+                elif row.get("HighlightKey") == "RED":
+                    style = ['background-color: #f8d7da; color: #721c24; font-weight: bold;'] * len(row)
+                return style
+                
+            # Filter layout to hide our internal HighlightKey tracking column from final display view
+            cols_to_show = ["Time", "Stock Name", "Breach Type", "Price", "Volume", "Strategy Vector"]
+            df_comm_display = df_comm_display[cols_to_show]
+            
+            styled_comm = df_comm_display.style.apply(color_commentary_rows, axis=1).format(precision=2)
+            commentary_placeholder.dataframe(styled_comm, use_container_width=True, hide_index=True)
+        else:
+            commentary_placeholder.info("📣 Awaiting market session alerts to begin printing the live breakout commentary feed.")
 
         # Frequency throttling barrier (Pausation check matching your few-seconds interval)
         time.sleep(3)
