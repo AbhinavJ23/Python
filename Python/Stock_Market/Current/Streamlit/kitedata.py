@@ -112,22 +112,22 @@ def process_market_pass(df_live_ticks, df_sr_baselines, previous_pass_data, conf
 
         # Condition 4: Price Up & Volume Up
         if curr_price > prev_price and curr_vol > prev_vol:
-            logger.debug(f"Price Up & Volume Up detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
+            #logger.debug(f"Price Up & Volume Up detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
             puvu_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
             
         # Condition 5: Price Down & Volume Down
         elif curr_price < prev_price and curr_vol < prev_vol:
-            logger.debug(f"Price Down & Volume Down detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
+            #logger.debug(f"Price Down & Volume Down detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
             pdvd_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
 
         # Condition 6: Price Up & Volume Down
         elif curr_price > prev_price and curr_vol < prev_vol:
-            logger.debug(f"Price Up & Volume Down detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
+            #logger.debug(f"Price Up & Volume Down detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
             puvd_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
 
         # Condition 7: Price Down & Volume Up
         elif curr_price < prev_price and curr_vol > prev_vol:
-            logger.debug(f"Price Down & Volume Up detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
+            #logger.debug(f"Price Down & Volume Up detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
             pdvu_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
 
     return {

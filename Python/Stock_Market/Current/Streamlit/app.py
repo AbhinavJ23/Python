@@ -679,6 +679,7 @@ else:
                                 f"📊 **Vol:** {vol_val:,}\n"
                                 #f"💰 **Turnover:** {turn_val:.2f} Cr\n"
                                 f"🔍 *Vector:* {label}",
+                                duration = "short",
                                 icon="🎯"
                             )
                             new_commentary_entries.append({
@@ -703,13 +704,13 @@ else:
         # D. Display updated states onto respective visual tab frames with color profiles
         # Helper cell color highlighting function for turnover matrix grids
         def color_price_status(val):
-            logger.debug(f"Coloring cell with value: {val}")
+            #logger.debug(f"Coloring cell with value: {val}")
             if val == "GREEN": return "background-color: #d4edda; color: #155724; font-weight: bold;"
             if val == "RED": return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
             return ""
 
         def color_sr_signals(row):
-            logger.debug(f"Coloring S/R signal row: {row.to_dict()}")
+            #logger.debug(f"Coloring S/R signal row: {row.to_dict()}")
             style = [''] * len(row)
             if row.get("Signal") == "GREEN": style = ['background-color: #d4edda; color: #155724; font-weight: bold;'] * len(row)
             elif row.get("Signal") == "RED": style = ['background-color: #f8d7da; color: #721c24; font-weight: bold;'] * len(row)
