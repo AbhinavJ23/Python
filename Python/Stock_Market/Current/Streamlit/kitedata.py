@@ -3,140 +3,164 @@ import numpy as np
 from datetime import datetime
 from baselogger import logger
 
-def process_market_pass(df_live_ticks, df_sr_baselines, previous_pass_data, config):
-    
+def process_market_pass(df_live_ticks, sr_dataframe, previous_pass_data, config):
+    """
+    Processes a completed time interval pass:
+    1. Computes true interval deltas for Volume and Turnover (in Crores).
+    2. Filters stocks exceeding Max/Min Turnover thresholds (Tabs 3 & 4).
+    3. Compares Price Shift vs. Interval Volume Shift across 4 vectors (Tabs 6–9).
+    4. Evaluates Support (S1) and Resistance (R1) breakouts.
+    """
     logger.debug("Processing market pass with live ticks and support/resistance baselines.")
 
-    """
-    config dict keys expected: 
-      - 'max_turnover_limit' (e.g., 100000000 for 10 Crore)
-      - 'min_turnover_limit' (e.g., 20000000 for 2 Crore)
-      - 'price_alert_percentage' (e.g., 0.5 for 0.5%)
-    """
     timestamp_str = datetime.now().strftime("%H:%M:%S")
     
-    # 1. Clean and transform incoming tick matrix data
-    current_pass_records = {}
     max_turnover_list = []
     min_turnover_list = []
+    puvu_list = []
+    pdvd_list = []
+    puvdn_list = []
+    pdvup_list = []
     
-    # Merge support/resistance baselines for easy matrix operations
-    sr_indexed = df_sr_baselines.set_index("Stock Symbol") if not df_sr_baselines.empty else None
+    current_pass_records = {}
+    
+    # Index Support/Resistance dataframe by Stock Symbol for fast lookups
+    sr_indexed = None
+    if sr_dataframe is not None and not sr_dataframe.empty and "Stock Symbol" in sr_dataframe.columns:
+        sr_indexed = sr_dataframe.set_index("Stock Symbol")
+
+    if df_live_ticks is None or df_live_ticks.empty or "Error" in df_live_ticks.columns:
+        return {
+            "max_turnover_df": pd.DataFrame(),
+            "min_turnover_df": pd.DataFrame(),
+            "puvu_list": [],
+            "pdvd_list": [],
+            "puvdn_list": [],
+            "pdvup_list": [],
+            "raw_pass_state": previous_pass_data
+        }
+
+    # Note: config['max_turnover_limit'] and config['min_turnover_limit'] are expected in raw Rupees.
+    # If your sidebar stores them directly in Crores, remove the "/ 10000000" division on the limit variables.
+    max_limit_cr = config.get("max_turnover_limit", 0) / 10000000
+    min_limit_cr = config.get("min_turnover_limit", 0) / 10000000
 
     for _, row in df_live_ticks.iterrows():
         sym = row["Stock Symbol"]
         ltp = row["Last Price"]
-        cum_volume = row["Volume"]
+        cum_vol = int(row["Volume"])
         cum_turnover = row["Turnover"]  # Total turnover cumulative since market open
         
-        # Calculate Delta (Turnover/Volume since LAST 5-minute pass)
-        prev_stock_data = previous_pass_data.get(sym, {})
-        prev_cum_turnover = prev_stock_data.get("cum_turnover", 0)
-        prev_cum_volume = prev_stock_data.get("cum_volume", 0)
-        prev_price = prev_stock_data.get("price", ltp)
+        prev_metrics = previous_pass_data.get(sym, {})
         
-        # Interval turnover and volume calculation
-        interval_turnover = cum_turnover - prev_cum_turnover
-        interval_volume = cum_volume - prev_cum_volume
+        # --- PASS 1 BASELINE INITIALIZATION ---
+        if not prev_metrics:
+            current_pass_records[sym] = {
+                "price": ltp,
+                "cum_volume": cum_vol,
+                "cum_turnover": cum_turnover,
+                "interval_vol": 0,
+                "interval_turnover": 0.0
+            }
+            continue
+
+        prev_price = prev_metrics.get("price", ltp)
+        prev_cum_vol = prev_metrics.get("cum_volume", 0)
+        prev_cum_turnover = prev_metrics.get("cum_turnover", 0.0)
+        prev_interval_vol = prev_metrics.get("interval_vol", 0)
+
+        # --- CALCULATE TRUE 5-MINUTE INTERVAL DELTAS ---
+        interval_vol = cum_vol - prev_cum_vol
+        if interval_vol < 0:
+            interval_vol = cum_vol
+
+        interval_turnover_raw = cum_turnover - prev_cum_turnover
+        if interval_turnover_raw < 0:
+            interval_turnover_raw = cum_turnover
+
+        interval_turnover_cr = round(interval_turnover_raw / 10000000, 2)
         
-        # Fallback handling for first pass of the day
-        if interval_turnover < 0: interval_turnover = cum_turnover
-        if interval_volume < 0: interval_volume = cum_volume
-            
-        # Store for next loop cross-comparison sequence
+        # Calculate interval price shift (%)
+        price_pct_shift = ((ltp - prev_price) / prev_price * 100) if prev_price > 0 else 0.0
+        price_status = "GREEN" if price_pct_shift >= config['price_alert_percentage'] else "RED"
+        #price_status = "GREEN" if ltp > prev_price else ("RED" if ltp < prev_price else "NEUTRAL")
+
+        # Save current metrics and interval deltas for the NEXT pass comparison
         current_pass_records[sym] = {
             "price": ltp,
+            "cum_volume": cum_vol,
             "cum_turnover": cum_turnover,
-            "cum_volume": cum_volume
+            "interval_vol": interval_vol,
+            "interval_turnover": interval_turnover_raw
         }
-        
-        # Calculate price percentage shift from previous pass
-        price_pct_shift = ((ltp - prev_price) / prev_price) * 100 if prev_price > 0 else 0.0
-        price_status = "GREEN" if price_pct_shift >= config['price_alert_percentage'] else "RED"
-        
-        # --- LOGIC 1: MAX CUMULATIVE TURNOVER FILTER ---
-        if interval_turnover >= config['max_turnover_limit']:
-            logger.debug(f"Stock {sym} passed MAX turnover filter: Interval Turnover={interval_turnover}, Price Shift={price_pct_shift}%")
+
+        # --- 1. MAX & MIN CUMULATIVE TURNOVER TABS (TABS 3 & 4) ---
+        if interval_turnover_cr >= max_limit_cr and max_limit_cr > 0:
+            logger.debug(f"Stock {sym} passed MAX turnover filter: Interval Turnover={interval_turnover_cr} Cr, Price Shift={price_pct_shift}%")
             max_turnover_list.append({
                 "Time": timestamp_str,
                 "Stock Name": sym,
-                "Cumulative Turnover (Interval)": round(interval_turnover/10000000, 2),
-                "Price": round(ltp,2),
+                "Cumulative Turnover (Interval)": interval_turnover_cr,
+                "Price": round(ltp, 2),
                 "Price Shift (%)": round(price_pct_shift, 2),
                 "Status": price_status
             })
-            
-        # --- LOGIC 2: MIN CUMULATIVE TURNOVER FILTER ---
-        if interval_turnover <= config['min_turnover_limit'] and interval_turnover > 0:
-            logger.debug(f"Stock {sym} passed MIN turnover filter: Interval Turnover={interval_turnover}, Price Shift={price_pct_shift}%")
+
+        if 0 < interval_turnover_cr <= min_limit_cr:
+            logger.debug(f"Stock {sym} passed MIN turnover filter: Interval Turnover={interval_turnover_cr} Cr, Price Shift={price_pct_shift}%")
             min_turnover_list.append({
                 "Time": timestamp_str,
                 "Stock Name": sym,
-                "Cumulative Turnover (Interval)": round(interval_turnover/10000000, 2),
-                "Price": round(ltp,2),
+                "Cumulative Turnover (Interval)": interval_turnover_cr,
+                "Price": round(ltp, 2),
                 "Price Shift (%)": round(price_pct_shift, 2),
                 "Status": price_status
             })
 
-    # Convert to standard DataFrames
-    df_max_turnover = pd.DataFrame(max_turnover_list)
-    df_min_turnover = pd.DataFrame(min_turnover_list)
-    
-    # --- LOGIC 4 & 5: PRICE UP/VOL UP & PRICE DOWN/VOL DOWN SIGNAL PARSER ---
-    puvu_list = []
-    pdvd_list = []
-    puvd_list = [] 
-    pdvu_list = []
-    
-    for sym, current_metrics in current_pass_records.items():
-        prev_metrics = previous_pass_data.get(sym, {})
-        if not prev_metrics:
-            continue  # Requires at least one previous pass to run comparisons
-            
-        # Extract previous pass parameters
-        prev_price = prev_metrics.get("price", 0)
-        prev_vol = prev_metrics.get("cum_volume", 0)
-        
-        curr_price = current_metrics["price"]
-        curr_vol = current_metrics["cum_volume"]
-        
-        # Evaluate Support/Resistance alerts if index matches match
-        sr_signal = "YELLOW"  # Default
+        # Skip interval-over-interval volume acceleration check on Pass 2 if Pass 1 baseline was 0
+        if prev_interval_vol == 0:
+            continue
+
+        # --- 2. SUPPORT / RESISTANCE BREAKOUT CHECK ---
+        sr_signal = "YELLOW"
         if sr_indexed is not None and sym in sr_indexed.index:
-            r1 = sr_indexed.loc[sym, "Resistance 1 (R1)"]
-            s1 = sr_indexed.loc[sym, "Support 1 (S1)"]
-            if curr_price > r1:
-                sr_signal = "GREEN"  # Breakout past resistance
-            elif curr_price < s1:
-                sr_signal = "RED"    # Breakdown below support
+            r1 = float(sr_indexed.loc[sym, "Resistance 1 (R1)"])
+            s1 = float(sr_indexed.loc[sym, "Support 1 (S1)"])
+            if ltp > r1:
+                sr_signal = "GREEN"
+            elif ltp < s1:
+                sr_signal = "RED"
 
-        # Condition 4: Price Up & Volume Up
-        if curr_price > prev_price and curr_vol > prev_vol:
-            #logger.debug(f"Price Up & Volume Up detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
-            puvu_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
+        # Unified dictionary containing Turnover (Cr) for all 4 signal tabs & Tab 10 alerts
+        record_dict = {
+            "Time": timestamp_str,
+            "Stock Name": sym,
+            "Price": round(ltp, 2),
+            "Volume": interval_vol,
+            "Turnover (Cr)": interval_turnover_cr,
+            "Signal": sr_signal
+        }
+
+        # --- 3. FOUR DIVERGENCE VECTORS (TABS 6, 7, 8, 9) ---
+        if ltp > prev_price and interval_vol > prev_interval_vol:
+            puvu_list.append(record_dict)
             
-        # Condition 5: Price Down & Volume Down
-        elif curr_price < prev_price and curr_vol < prev_vol:
-            #logger.debug(f"Price Down & Volume Down detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
-            pdvd_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
-
-        # Condition 6: Price Up & Volume Down
-        elif curr_price > prev_price and curr_vol < prev_vol:
-            #logger.debug(f"Price Up & Volume Down detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
-            puvd_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
-
-        # Condition 7: Price Down & Volume Up
-        elif curr_price < prev_price and curr_vol > prev_vol:
-            #logger.debug(f"Price Down & Volume Up detected for {sym}: Prev Price={prev_price}, Curr Price={curr_price}, Prev Vol={prev_vol}, Curr Vol={curr_vol}")
-            pdvu_list.append({"Time": timestamp_str, "Stock Name": sym, "Price": curr_price, "Volume": curr_vol, "Signal": sr_signal})
+        elif ltp < prev_price and interval_vol < prev_interval_vol:
+            pdvd_list.append(record_dict)
+            
+        elif ltp > prev_price and interval_vol < prev_interval_vol:
+            puvdn_list.append(record_dict)
+            
+        elif ltp < prev_price and interval_vol > prev_interval_vol:
+            pdvup_list.append(record_dict)
 
     return {
-        "max_turnover_df": df_max_turnover,
-        "min_turnover_df": df_min_turnover,
+        "max_turnover_df": pd.DataFrame(max_turnover_list),
+        "min_turnover_df": pd.DataFrame(min_turnover_list),
         "puvu_list": puvu_list,
         "pdvd_list": pdvd_list,
-        "puvd_list": puvd_list,
-        "pdvu_list": pdvu_list,
+        "puvdn_list": puvdn_list,
+        "pdvup_list": pdvup_list,
         "raw_pass_state": current_pass_records
     }
 

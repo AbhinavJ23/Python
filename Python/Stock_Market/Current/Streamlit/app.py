@@ -200,7 +200,7 @@ elif not st.session_state.user_logged_in:
             new_user = st.text_input("Choose Username")
             new_pass = st.text_input("Choose Password", type="password")
             conf_pass = st.text_input("Confirm Password", type="password")
-            signup_clicked = st.form_submit_button("Register New User")
+            signup_clicked = st.form_submit_button("Register")
                         
             if signup_clicked:
                 if new_user and new_pass and conf_pass:
@@ -642,33 +642,36 @@ else:
                 df_new_pdvd = pd.DataFrame(pass_results["pdvd_list"])
                 st.session_state.pdvd_history = pd.concat([st.session_state.pdvd_history, df_new_pdvd]).drop_duplicates().reset_index(drop=True)
 
-            if pass_results["puvd_list"]:
-                logger.debug(f"Appending {len(pass_results['puvd_list'])} new Price Up Volume Down entries to history.")
-                st.session_state.puvd_history = pd.concat([st.session_state.puvd_history, pd.DataFrame(pass_results["puvd_list"])]).drop_duplicates().reset_index(drop=True)
+            if pass_results["puvdn_list"]:
+                logger.debug(f"Appending {len(pass_results['puvdn_list'])} new Price Up Volume Down entries to history.")
+                st.session_state.puvd_history = pd.concat([st.session_state.puvd_history, pd.DataFrame(pass_results["puvdn_list"])]).drop_duplicates().reset_index(drop=True)
 
-            if pass_results["pdvu_list"]:
-                logger.debug(f"Appending {len(pass_results['pdvu_list'])} new Price Down Volume Up entries to history.")
-                st.session_state.pdvu_history = pd.concat([st.session_state.pdvu_history, pd.DataFrame(pass_results["pdvu_list"])]).drop_duplicates().reset_index(drop=True)
+            if pass_results["pdvup_list"]:
+                logger.debug(f"Appending {len(pass_results['pdvup_list'])} new Price Down Volume Up entries to history.")
+                st.session_state.pdvu_history = pd.concat([st.session_state.pdvu_history, pd.DataFrame(pass_results["pdvup_list"])]).drop_duplicates().reset_index(drop=True)
                 
             # Reset pass tracking timer baseline checkpoint
             st.session_state.last_pass_timestamp = now
             logger.debug("Pass complete! Operational metrics refreshed across tabs.")
 
             new_commentary_entries = []
+            # Ensure threshold is in Crores (adjust variable name if your sidebar uses a different name)
+            turnover_cutoff_cr = runtime_config.get("max_turnover_limit", 0) / 10000000
             for list_name, label in [
                 ("puvu_list", "📈 Price Up Volume Up"),
                 ("pdvd_list", "📉 Price Down Volume Down"),
-                ("puvd_list", "⚡ Price Up Volume Down"),
-                ("pdvu_list", "💥 Price Down Volume Up")
+                ("puvdn_list", "⚡ Price Up Volume Down"),
+                ("pdvup_list", "💥 Price Down Volume Up")
                 ]:
                 if pass_results.get(list_name):
                     for record in pass_results[list_name]:
-                        # Only fire a popup if it breaches Support (RED) or Resistance (GREEN)
-                        if record.get("Signal") in ["GREEN", "RED"]:
+                        # Trigger alert ONLY if S/R is broken AND interval turnover meets Max Turnover Threshold
+                        if record.get("Signal") in ["GREEN", "RED"] and record.get("Turnover (Cr)", 0) >= turnover_cutoff_cr:
+                        #if record.get("Signal") in ["GREEN", "RED"]:
                             sym_name = record["Stock Name"]
                             ltp_val = record["Price"]
                             vol_val = record["Volume"]
-                            #turn_val = record["Turnover (Cr)"]
+                            turn_val = record["Turnover (Cr)"]
                             alert_type = "🚀 RESISTANCE BREAKOUT" if record["Signal"] == "GREEN" else "⚠️ SUPPORT BREAKDOWN"
                                 
                             # Fire an institutional-grade toast notification popup box instantly
@@ -677,7 +680,7 @@ else:
                                 f"📦 **Stock:** {sym_name}\n"
                                 f"💵 **Price:** ₹{ltp_val:,.2f}\n"
                                 f"📊 **Vol:** {vol_val:,}\n"
-                                #f"💰 **Turnover:** {turn_val:.2f} Cr\n"
+                                f"💰 **Turnover:** {turn_val:.2f} Cr\n"
                                 f"🔍 *Vector:* {label}",
                                 duration = "short",
                                 icon="🎯"
@@ -688,7 +691,7 @@ else:
                                     "Breach Type": alert_type,
                                     "Price": ltp_val,
                                     "Volume": vol_val,
-                                    #"Turnover (Cr)": turn_val,
+                                    "Turnover (Cr)": turn_val,
                                     "Strategy Vector": label,
                                     "HighlightKey": record["Signal"] # Hidden mapping column for row colors
                                 })
