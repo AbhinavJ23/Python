@@ -5,11 +5,10 @@ from baselogger import logger
 
 def process_market_pass(df_live_ticks, sr_dataframe, previous_pass_data, config):
     """
-    Processes a completed time interval pass:
+    Phase 1 Upgraded Engine:
     1. Computes true interval deltas for Volume and Turnover (in Crores).
-    2. Filters stocks exceeding Max/Min Turnover thresholds (Tabs 3 & 4).
-    3. Compares Price Shift vs. Interval Volume Shift across 4 vectors (Tabs 6–9).
-    4. Evaluates Support (S1) and Resistance (R1) breakouts.
+    2. Tracks rolling 5-interval average volume for 1.5x RVOL surge detection.
+    3. Validates breakouts against S/R, Intraday VWAP, 1.5x RVOL, and Day High/Low proximity.
     """
     logger.debug("Processing market pass with live ticks and support/resistance baselines.")
 
@@ -45,13 +44,26 @@ def process_market_pass(df_live_ticks, sr_dataframe, previous_pass_data, config)
     max_limit_cr = config.get("max_turnover_limit", 0) / 10000000
     min_limit_cr = config.get("min_turnover_limit", 0) / 10000000
 
+    # Extract index change passed from app.py (defaults to 0.0 if missing)
+    index_change_pct = float(config.get("index_change_pct", 0.0))
+    rs_threshold = float(config.get("rs_threshold", 0.50))
+    rvol_multiplier = float(config.get("rvol_multiplier", 1.50))
+    hl_prox_pct = float(config.get("hl_proximity_pct", 0.25)) / 100.0  # Converts 0.25% -> 0.0025
+
     for _, row in df_live_ticks.iterrows():
         sym = row["Stock Symbol"]
         ltp = row["Last Price"]
+        stock_change_pct = row["Change (%)"]
+        vwap = row["VWAP"]
+        day_high = row["Day High"]
+        day_low = row["Day Low"]
         cum_vol = int(row["Volume"])
         cum_turnover = row["Turnover"]  # Total turnover cumulative since market open
         
         prev_metrics = previous_pass_data.get(sym, {})
+        
+        # Calculate Intraday Relative Strength (Alpha vs. Benchmark Index)
+        rs_alpha = round(stock_change_pct - index_change_pct, 2)
         
         # --- PASS 1 BASELINE INITIALIZATION ---
         if not prev_metrics:
@@ -60,7 +72,8 @@ def process_market_pass(df_live_ticks, sr_dataframe, previous_pass_data, config)
                 "cum_volume": cum_vol,
                 "cum_turnover": cum_turnover,
                 "interval_vol": 0,
-                "interval_turnover": 0.0
+                "interval_turnover": 0.0,
+                "vol_history": []
             }
             continue
 
@@ -68,6 +81,7 @@ def process_market_pass(df_live_ticks, sr_dataframe, previous_pass_data, config)
         prev_cum_vol = prev_metrics.get("cum_volume", 0)
         prev_cum_turnover = prev_metrics.get("cum_turnover", 0.0)
         prev_interval_vol = prev_metrics.get("interval_vol", 0)
+        vol_history = list(prev_metrics.get("vol_history", []))
 
         # --- CALCULATE TRUE 5-MINUTE INTERVAL DELTAS ---
         interval_vol = cum_vol - prev_cum_vol
@@ -81,9 +95,27 @@ def process_market_pass(df_live_ticks, sr_dataframe, previous_pass_data, config)
         interval_turnover_cr = round(interval_turnover_raw / 10000000, 2)
         
         # Calculate interval price shift (%)
+        alert_pct_threshold = float(config.get("price_alert_percentage", 0.0))
+
+        # Calculate interval price shift (%)
         price_pct_shift = ((ltp - prev_price) / prev_price * 100) if prev_price > 0 else 0.0
-        price_status = "GREEN" if price_pct_shift >= config['price_alert_percentage'] else "RED"
-        #price_status = "GREEN" if ltp > prev_price else ("RED" if ltp < prev_price else "NEUTRAL")
+
+        # Compare percentage shift against your sidebar alert threshold
+        if price_pct_shift >= alert_pct_threshold and price_pct_shift > 0:
+            price_status = "GREEN"
+        elif price_pct_shift <= -alert_pct_threshold and price_pct_shift < 0:
+            price_status = "RED"
+        else:
+            price_status = "NEUTRAL"
+
+        # --- CALCULATE ROLLING AVERAGE VOLUME (RVOL BASELINE) ---
+        avg_prev_vol = (sum(vol_history) / len(vol_history)) if len(vol_history) > 0 else prev_interval_vol
+
+        # Update rolling window (keep last 5 completed intervals)
+        if interval_vol > 0:
+            vol_history.append(interval_vol)
+            if len(vol_history) > 5:
+                vol_history.pop(0)
 
         # Save current metrics and interval deltas for the NEXT pass comparison
         current_pass_records[sym] = {
@@ -91,7 +123,8 @@ def process_market_pass(df_live_ticks, sr_dataframe, previous_pass_data, config)
             "cum_volume": cum_vol,
             "cum_turnover": cum_turnover,
             "interval_vol": interval_vol,
-            "interval_turnover": interval_turnover_raw
+            "interval_turnover": interval_turnover_raw,
+            "vol_history": vol_history
         }
 
         # --- 1. MAX & MIN CUMULATIVE TURNOVER TABS (TABS 3 & 4) ---
@@ -118,7 +151,7 @@ def process_market_pass(df_live_ticks, sr_dataframe, previous_pass_data, config)
             })
 
         # Skip interval-over-interval volume acceleration check on Pass 2 if Pass 1 baseline was 0
-        if prev_interval_vol == 0:
+        if prev_interval_vol == 0 or avg_prev_vol == 0:
             continue
 
         # --- 2. SUPPORT / RESISTANCE BREAKOUT CHECK ---
@@ -126,9 +159,26 @@ def process_market_pass(df_live_ticks, sr_dataframe, previous_pass_data, config)
         if sr_indexed is not None and sym in sr_indexed.index:
             r1 = float(sr_indexed.loc[sym, "Resistance 1 (R1)"])
             s1 = float(sr_indexed.loc[sym, "Support 1 (S1)"])
-            if ltp > r1:
+
+            # Filter A: 1.5x Relative Volume Surge
+            is_rvol_surge = interval_vol >= (rvol_multiplier * avg_prev_vol)
+            
+            # Filter B: Intraday VWAP Alignment (fallback to True if exchange VWAP is 0)
+            is_above_vwap = (ltp > vwap) if vwap > 0 else True
+            is_below_vwap = (ltp < vwap) if vwap > 0 else True
+            
+            # Filter C: High/Low Candle Proximity (within 0.25% of Day High / Day Low)
+            is_near_high = (ltp >= day_high * (1.0 - hl_prox_pct)) if day_high > 0 else True
+            is_near_low = (ltp <= day_low * (1.0 + hl_prox_pct)) if day_low > 0 else True
+
+            # Filter D: Intraday Relative Strength (Alpha vs. Index)
+            is_rs_outperforming = rs_alpha >= rs_threshold
+            is_rs_underperforming = rs_alpha <= -rs_threshold
+
+            # Combined Buy & Sell Signal Validation
+            if ltp > r1 and is_rvol_surge and is_above_vwap and is_near_high and is_rs_outperforming:
                 sr_signal = "GREEN"
-            elif ltp < s1:
+            elif ltp < s1 and is_rvol_surge and is_below_vwap and is_near_low and is_rs_underperforming:
                 sr_signal = "RED"
 
         # Unified dictionary containing Turnover (Cr) for all 4 signal tabs & Tab 10 alerts
@@ -136,6 +186,7 @@ def process_market_pass(df_live_ticks, sr_dataframe, previous_pass_data, config)
             "Time": timestamp_str,
             "Stock Name": sym,
             "Price": round(ltp, 2),
+            "Alpha (%)": rs_alpha,
             "Volume": interval_vol,
             "Turnover (Cr)": interval_turnover_cr,
             "Signal": sr_signal

@@ -258,16 +258,70 @@ else:
         st.markdown("### ⚙️ Screening Configurations")
         
         # Configurable settings inputs replacing your static hardcoded variables
-        duration_minutes = st.number_input("Pass Duration (Mins):", min_value=1, max_value=60, value=5)
-        max_crore = st.number_input("Max Turnover Threshold (In Crores):", min_value=0.1, value=10.0, step=0.5)
-        min_crore = st.number_input("Min Turnover Threshold (In Crores):", min_value=0.1, value=2.0, step=0.5)
-        alert_pct = st.number_input("Price Comparison Target Alert (%)", min_value=0.01, value=0.5, step=0.05)
+        duration_minutes = st.number_input(
+            "Pass Duration (Mins):",
+            min_value=1,
+            max_value=60,
+            value=5,
+            help="Time interval (in minutes) between each market scan pass. Every pass calculates fresh interval volume, turnover deltas, and breakout signals."
+        )
+        max_crore = st.number_input(
+            "Max Turnover Threshold (Cr):",
+            min_value=0.1,
+            value=10.0,
+            step=0.5,
+            help="Minimum interval turnover (in Crores) required to flag high institutional activity in Tab 3 and qualify a Support/Resistance breach for Tab 10 alerts."
+        )
+        min_crore = st.number_input(
+            "Min Turnover Threshold (Cr):",
+            min_value=0.1,
+            value=2.0,
+            step=0.5,
+            help="Maximum interval turnover (in Crores) used to identify low-liquidity or thinly traded stocks in Tab 4."
+        )
+        alert_pct = st.number_input(
+            "Price Alert (%):",
+            min_value=0.01,
+            max_value=20.0,
+            value=0.5,
+            step=0.05,
+            help="Minimum interval price change (%) required to highlight a stock GREEN (gain) or RED (drop) inside the Max and Min Turnover tabs."
+        )
+
+        with st.sidebar.expander("🎛️ Advanced Signal Filters", expanded=False):
+            rs_threshold_input = st.number_input(
+                "Min Relative Strength Alpha (%):",
+                min_value=0.0,
+                max_value=5.0,
+                value=0.50,
+                step=0.10,
+                help="Minimum outperformance (%) against the active index required for a breakout."
+            )
+            rvol_mult_input = st.number_input(
+                "Min Relative Volume Surge (x):",
+                min_value=1.0,
+                max_value=5.0,
+                value=1.50,
+                step=0.10,
+                help="Current interval volume must be at least this multiple of the rolling 5-interval average."
+            )
+            hl_prox_pct_input = st.number_input(
+                "High/Low Proximity Buffer (%):",
+                min_value=0.05,
+                max_value=2.0,
+                value=0.25,
+                step=0.05,
+                help="Price must close within this percentage of Day High (for Buys) or Day Low (for Sells)."
+            )
         
         # Convert Crores to absolute integer values for pure math comparison mapping
         runtime_config = {
             'max_turnover_limit': max_crore * 10000000,
             'min_turnover_limit': min_crore * 10000000,
-            'price_alert_percentage': alert_pct
+            'price_alert_percentage': alert_pct,
+            "rs_threshold": rs_threshold_input,
+            "rvol_multiplier": rvol_mult_input,
+            "hl_proximity_pct": hl_prox_pct_input
         }
 
         if st.button("🚪 Terminate Session & Log Out", use_container_width=True):
@@ -306,6 +360,7 @@ else:
         #    st.session_state.user_logged_in = False
         #    st.rerun()
     
+
     #INITIALIZE IN-MEMORY TIME-SERIES DATABASES
     if "sr_matrix_dataframe" not in st.session_state:
         logger.debug("Initializing in-memory time-series databases.")
@@ -335,7 +390,7 @@ else:
         st.markdown("""
         <div style='margin-top: -35px; padding-top: 0px; margin-bottom: 5px;'>
             <h4 style='font-size: 1.3rem !important; margin: 0px; padding: 0px;'>
-                📈 Real-Time Market Data - Price, Volume, Turnover Monitoring
+                📈 Real-Time Market Data - Buy/Sell Signal Trigger Using Price, Volume, Turnover
             </h4>
         </div>
         <hr style='margin-top: 2px; margin-bottom: 10px; border: 0; border-top: 1px solid #ccc;'>
@@ -606,6 +661,8 @@ else:
         now = datetime.now()
         if now - st.session_state.last_pass_timestamp >= timedelta(minutes=duration_minutes):
             logger.debug("Duration threshold crossed. Executing market pass calculations.")
+            # Inject live index daily % change into runtime_config for RS calculation
+            runtime_config["index_change_pct"] = index_metrics.get("change", 0.0)
             # Execute calculation matrix using kitedata file engine
             pass_results = kitedata.process_market_pass(
                 df_live_ticks, 
@@ -673,6 +730,8 @@ else:
                             vol_val = record["Volume"]
                             turn_val = record["Turnover (Cr)"]
                             alert_type = "🚀 RESISTANCE BREAKOUT" if record["Signal"] == "GREEN" else "⚠️ SUPPORT BREAKDOWN"
+                            alpha_val = record.get("Alpha (%)", 0.0)
+                            alpha_str = f"+{alpha_val:.2f}%" if alpha_val >= 0 else f"{alpha_val:.2f}%"
                                 
                             # Fire an institutional-grade toast notification popup box instantly
                             st.toast(
@@ -682,7 +741,7 @@ else:
                                 f"📊 **Vol:** {vol_val:,}\n"
                                 f"💰 **Turnover:** {turn_val:.2f} Cr\n"
                                 f"🔍 *Vector:* {label}",
-                                duration = "short",
+                                duration = 4,
                                 icon="🎯"
                             )
                             new_commentary_entries.append({
@@ -690,6 +749,7 @@ else:
                                     "Stock Name": sym_name,
                                     "Breach Type": alert_type,
                                     "Price": ltp_val,
+                                    "Alpha vs Index (%)": alpha_val,
                                     "Volume": vol_val,
                                     "Turnover (Cr)": turn_val,
                                     "Strategy Vector": label,
@@ -808,12 +868,14 @@ else:
 
         # Render Tab 8 (PriceUp VolumeDown)
         if not st.session_state.puvd_history.empty:
+            logger.debug("Rendering Cumulative Price Up & Volume Down Divergences tab.")
             puvd_placeholder.dataframe(st.session_state.puvd_history.style.apply(color_sr_signals, axis=1).format(precision=2), use_container_width=True, hide_index=True)
         else:
             puvd_placeholder.info("Awaiting the first completed pass to register Price Up & Volume Down signals.")
 
         # Render Tab 9 (PriceDown VolumeUp)
         if not st.session_state.pdvu_history.empty:
+            logger.debug("Rendering Cumulative Price Down & Volume Up Divergences tab.")
             pdvu_placeholder.dataframe(st.session_state.pdvu_history.style.apply(color_sr_signals, axis=1).format(precision=2), use_container_width=True, hide_index=True)
         else:
             pdvu_placeholder.info("Awaiting the first completed pass to register Price Down & Volume Up signals.")
@@ -832,7 +894,7 @@ else:
                 return style
                 
             # Filter layout to hide our internal HighlightKey tracking column from final display view
-            cols_to_show = ["Time", "Stock Name", "Breach Type", "Price", "Volume", "Strategy Vector"]
+            cols_to_show = ["Time", "Stock Name", "Breach Type", "Price", "Alpha vs Index (%)", "Volume", "Turnover (Cr)", "Strategy Vector"]
             df_comm_display = df_comm_display[cols_to_show]
             
             styled_comm = df_comm_display.style.apply(color_commentary_rows, axis=1).format(precision=2)

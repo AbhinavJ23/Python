@@ -41,13 +41,13 @@ def fetch_live_quotes(symbol_list, index_name, kite_instance):
             # Map parameters matching your exact screening requirements
             parsed_records.append({
                 "Stock Symbol": clean_symbol,
-                #"Time": metrics.get("timestamp", ""),
                 "Time": datetime.strftime(metrics.get("timestamp", datetime.now()), "%d-%m-%Y %H:%M:%S") if metrics.get("timestamp") else "",
                 "Open": round(metrics.get("ohlc", {}).get("open", 0.0), 2),
                 "Day High": round(metrics.get("ohlc", {}).get("high", 0.0), 2),
                 "Day Low": round(metrics.get("ohlc", {}).get("low", 0.0), 2),
                 "Previous Close": round(metrics.get("ohlc", {}).get("close", 0.0), 2),
                 "Last Price": round(metrics.get("last_price", 0.0), 2),
+                "VWAP": round(metrics.get("average_price", 0.0), 2),
                 "Change": round(metrics.get("last_price", 0.0) - metrics.get("ohlc", {}).get("close", 0.0), 2),
                 "Change (%)": round((metrics.get("last_price", 0.0) - metrics.get("ohlc", {}).get("close", 0.0)) / metrics.get("ohlc", {}).get("close", 1.0) * 100, 2) if metrics.get("ohlc", {}).get("close", 0.0) != 0 else 0.0,
                 "Volume": metrics.get("volume", 0),
