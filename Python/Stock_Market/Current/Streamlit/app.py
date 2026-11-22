@@ -14,7 +14,7 @@ import pandas as pd
 from baselogger import logger
 import altair as alt
 
-st.set_page_config(layout="wide", page_title="Market Screener Framework")
+st.set_page_config(layout="wide", page_title="Market Breakout Radar")
 
 # -----------------------------------------------------------------
 # 1. DATABASE AUTOMATED SEEDING INITIALIZATION
@@ -390,7 +390,7 @@ else:
         st.markdown("""
         <div style='margin-top: -35px; padding-top: 0px; margin-bottom: 5px;'>
             <h4 style='font-size: 1.3rem !important; margin: 0px; padding: 0px;'>
-                📈 Real-Time Market Data - Buy/Sell Signal Trigger Using Price, Volume, Turnover
+                📈 Live Market Data & Buy/Sell Signal
             </h4>
         </div>
         <hr style='margin-top: 2px; margin-bottom: 10px; border: 0; border-top: 1px solid #ccc;'>

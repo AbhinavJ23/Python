@@ -1,6 +1,6 @@
         
 
-index_symbols = ['NIFTY 50', 'NIFTY NEXT 50', 'NIFTY 100', 'NIFTY MIDCAP 50', 'NIFTY SMALLCAP 50']
+index_symbols = ['NIFTY 50', 'NIFTY BANK', 'NIFTY NEXT 50', 'NIFTY 100', 'NIFTY MIDCAP 50', 'NIFTY SMALLCAP 50']
 nifty_50_symbols = [
             "ADANIENT", "ADANIPORTS", "APOLLOHOSP", "ASIANPAINT", "AXISBANK", "BAJAJ-AUTO", 
             "BAJAJFINSV", "BAJFINANCE", "BEL", "BHARTIARTL", "BSE", "CIPLA", "COALINDIA", 
@@ -10,6 +10,10 @@ nifty_50_symbols = [
             "NIFTY 50", "NTPC", "ONGC", "POWERGRID", "RELIANCE", "SBILIFE", "SBIN", 
             "SHRIRAMFIN", "SUNPHARMA", "TATACONSUM", "TATASTEEL", "TCS", "TECHM", 
             "TITAN", "TMPV", "TRENT", "ULTRACEMCO"
+        ]
+nifty_bank_symbols = [
+            "AUBANK", "AXISBANK", "BANKBARODA", "CANBK", "FEDERALBNK", "HDFCBANK", "ICICIBANK",
+            "IDFCFIRSTB", "INDUSINDBK", "KOTAKBANK", "NIFTY BANK", "PNB", "SBIN", "UNIONBANK", "YESBANK"
         ]
 nifty_next_50_symbols = [
             "ABB", "ADANIENSOL", "ADANIGREEN", "ADANIPOWER", "AMBUJACEM", "BAJAJHLDNG",
@@ -60,6 +64,7 @@ nifty_100_symbols = [
 
 INDEX_MAPPING = {
     "Nifty 50": nifty_50_symbols,
+    "Nifty Bank": nifty_bank_symbols,
     "Nifty Next 50": nifty_next_50_symbols,
     "NIFTY MIDCAP 50": nifty_midcap_50_symbols,
     "NIFTY SMALLCAP 50": nifty_smallcap_50_symbols,

@@ -12,14 +12,15 @@ def fetch_live_quotes(symbol_list, index_name, kite_instance):
     index_token = f"NSE:{index_name.upper()}"
     if index_token not in formatted_symbols:
         formatted_symbols.append(index_token)
+
+    index_data = {"last_price": 0.0, "change": 0.0}
     
     try:
         # 2. Bulk pull live tick values (Prices, Volume, Open Interest, Turnover)
         raw_quotes = kite_instance.quote(formatted_symbols)
               
         parsed_records = []
-        index_data = {"last_price": 0.0, "change": 0.0}
-
+        
         for symbol_key, metrics in raw_quotes.items():
             # Check if this row is the master index metric block
             if symbol_key == index_token:

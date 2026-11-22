@@ -44,7 +44,7 @@ hidden_imports = [
 # 5. Formulate the comprehensive institutional packaging command string
 command = [
     "pyinstaller",
-    "--name=VoluMatrix_Terminal",
+    "--name=MarketBreakoutRadar",
     "--onedir",
     "--clean",
     "--noconfirm",
